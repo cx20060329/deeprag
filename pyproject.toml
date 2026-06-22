@@ -1,0 +1,24 @@
+[project]
+name = "bcm-rag"
+version = "0.2.0"
+description = "BCM-RAG: Enterprise-grade RAG system for automotive BCM functional specifications"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    # Parsing
+    "magic-pdf>=1.3.12",
+    "beautifulsoup4>=4.12",
+    # Retrieval
+    "numpy>=2.0",
+    "networkx>=3.0",
+    "sentence-transformers>=4.0",
+    # LLM
+    "openai>=2.0",
+    "httpx>=0.28",
+    # API
+    "fastapi>=0.137",
+    "uvicorn>=0.49",
+    # Runtime databases (optional — memory backends used if not installed)
+    "neo4j>=5.0",
+    "qdrant-client>=1.0",
+]

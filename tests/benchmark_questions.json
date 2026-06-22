@@ -1,0 +1,1030 @@
+{
+  "meta": {
+    "name": "BCM-RAG Engineering Reasoning Benchmark",
+    "version": "1.0",
+    "total_questions": 100,
+    "description": "Evaluates whether BCM-RAG is a RAG system or an Engineering Reasoning System",
+    "categories": {
+      "A": {"name": "事实查询 (Factual)", "count": 22, "tests": "basic retrieval, no reasoning needed"},
+      "B": {"name": "多跳推理 (Multi-hop)", "count": 18, "tests": "dependency chain traversal via KG"},
+      "C": {"name": "状态迁移 (State Transition)", "count": 15, "tests": "state machine path finding"},
+      "D": {"name": "条件推理 (Conditional)", "count": 15, "tests": "backward chaining, condition tree"},
+      "E": {"name": "路径推理 (Path Reasoning)", "count": 10, "tests": "forward chaining, impact analysis"},
+      "F": {"name": "冲突检测 (Conflict Detection)", "count": 10, "tests": "rule overlap, inconsistency"},
+      "G": {"name": "可达性分析 (Reachability)", "count": 10, "tests": "deadlock, unreachable states"}
+    },
+    "baseline_system": "Hybrid RAG only (Dense + BM25, no KG/Graph reasoning)",
+    "experiment_system": "Full BCM-RAG (Hybrid RAG + Knowledge Graph + Rule Engine + State Machine)"
+  },
+  "questions": [
+    {
+      "id": "A01",
+      "category": "A",
+      "question": "BCM车身控制模块包含哪些子系统？",
+      "expected_answer": "VMM车辆模式管理、ExteriorLight外灯、InteriorLight内灯、Window车窗、Lock门锁、Wiper雨刮、RemoteControl遥控、ATWS防盗",
+      "ground_truth_sections": ["1"],
+      "requires_kg": false,
+      "requires_rules": false,
+      "requires_sm": false,
+      "difficulty": "easy",
+      "answer_type": "list",
+      "key_entities": ["VMM", "ExteriorLight", "InteriorLight", "Window", "Lock", "Wiper"]
+    },
+    {
+      "id": "A02",
+      "category": "A",
+      "question": "VMM模块的完整名称是什么？",
+      "expected_answer": "车辆模式管理（Vehicle Mode Management）",
+      "ground_truth_sections": ["2"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": false,
+      "difficulty": "easy", "answer_type": "short",
+      "key_entities": ["VMM"]
+    },
+    {
+      "id": "A03",
+      "category": "A",
+      "question": "BCM定义了哪几种电源模式？",
+      "expected_answer": "Abandoned（休眠）、Inactive（非活跃）、Convenience（便利）、Driving（驾驶）四种模式",
+      "ground_truth_sections": ["2.3.1"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "easy", "answer_type": "list",
+      "key_entities": ["Abandoned", "Inactive", "Convenience", "Driving"]
+    },
+    {
+      "id": "A04",
+      "category": "A",
+      "question": "Abandoned模式的定义是什么？",
+      "expected_answer": "Abandoned模式是最终的休眠模式，通常在保持Inactive一段时间后进入，目的是关闭待机状态使网络休眠以达到最低系统功耗",
+      "ground_truth_sections": ["2.3.1"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": false,
+      "difficulty": "easy", "answer_type": "definition",
+      "key_entities": ["Abandoned"]
+    },
+    {
+      "id": "A05",
+      "category": "A",
+      "question": "Inactive模式的特征是什么？",
+      "expected_answer": "Inactive是典型的休息模式，控制器功能可用性保持在最低限度，有限功能（如收音机）处于休眠状态等待用户激活，不需要有效钥匙即可访问",
+      "ground_truth_sections": ["2.3.1"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": false,
+      "difficulty": "easy", "answer_type": "definition",
+      "key_entities": ["Inactive"]
+    },
+    {
+      "id": "A06",
+      "category": "A",
+      "question": "Convenience模式下可以使用哪些功能？",
+      "expected_answer": "用户可以使用许多便利功能，但如果没有足够电能启动汽车则EEPM将限制使用。必须检测并批准钥匙",
+      "ground_truth_sections": ["2.3.1"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": false,
+      "difficulty": "easy", "answer_type": "definition",
+      "key_entities": ["Convenience"]
+    },
+    {
+      "id": "A07",
+      "category": "A",
+      "question": "Driving模式的定义和特征是什么？",
+      "expected_answer": "Driving模式下动力系统启动并准备提供扭矩，全功能可用。如果车辆中没有足够的电力或能量，EEPM将减少负载",
+      "ground_truth_sections": ["2.3.1"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": false,
+      "difficulty": "easy", "answer_type": "definition",
+      "key_entities": ["Driving"]
+    },
+    {
+      "id": "A08",
+      "category": "A",
+      "question": "BCM的工作电压分为哪几个范围？",
+      "expected_answer": "0V-6V（停止电压）、6V-9V（低电压）、9V-16V（正常电压）、16V-18V（高电压）、18V以上（过高电压）",
+      "ground_truth_sections": ["2.5"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "easy", "answer_type": "list",
+      "key_entities": ["Stop Voltage", "Low Voltage", "Normal Voltage", "High Voltage"]
+    },
+    {
+      "id": "A09",
+      "category": "A",
+      "question": "正常电压范围是多少？进入和退出的阈值是什么？",
+      "expected_answer": "9V-16V，进入阈值↑9V，退出阈值↓16V",
+      "ground_truth_sections": ["2.5"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "easy", "answer_type": "short",
+      "key_entities": ["Normal Voltage"]
+    },
+    {
+      "id": "A10",
+      "category": "A",
+      "question": "PEPS_UsageMode信号有哪些取值？",
+      "expected_answer": "0x0=Inactive、0x1=Convenience、0x2=Driving",
+      "ground_truth_sections": ["2.3.3"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "list",
+      "key_entities": ["PEPS_UsageMode"]
+    },
+    {
+      "id": "A11",
+      "category": "A",
+      "question": "IGN1继电器的作用是什么？",
+      "expected_answer": "IGN1继电器控制车辆电源模式切换时的电源输出，在Convenience/Driving模式下驱动高电平，Inactive模式下驱动低电平",
+      "ground_truth_sections": ["2.3.4.2.2", "2.3.4.3.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "definition",
+      "key_entities": ["IGN1"]
+    },
+    {
+      "id": "A12",
+      "category": "A",
+      "question": "PEPS_IGN1RelaySts信号有哪些状态值？",
+      "expected_answer": "0x0=Inactive、0x1=Active",
+      "ground_truth_sections": ["2.3.4.2.2"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "short",
+      "key_entities": ["PEPS_IGN1RelaySts"]
+    },
+    {
+      "id": "A13",
+      "category": "A",
+      "question": "ExteriorLight模块包含哪些灯光功能？",
+      "expected_answer": "位置灯、近光灯、远光灯、日间行车灯(DRL)、后雾灯、刹车灯、倒车灯、转向灯、危险报警灯",
+      "ground_truth_sections": ["3"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": false,
+      "difficulty": "easy", "answer_type": "list",
+      "key_entities": ["ExteriorLight", "PositionLight", "LowBeam", "HighBeam", "DRL"]
+    },
+    {
+      "id": "A14",
+      "category": "A",
+      "question": "CfgTCMEOLOption配置参数的取值和含义是什么？",
+      "expected_answer": "00=不使用、01=不上CAN（硬件采集）、10=上CAN（TCM报文）、11=上CAN（怀挡：TCM报文+MMI大灯控制），默认0x0",
+      "ground_truth_sections": ["3.2.4.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "detail",
+      "key_entities": ["CfgTCMEOLOption"]
+    },
+    {
+      "id": "A15",
+      "category": "A",
+      "question": "近光灯的激活条件是什么？",
+      "expected_answer": "位置灯逻辑使能为on，电源模式为Convenience或Driving且非远程模式，近光灯开关由Off到On时激活",
+      "ground_truth_sections": ["3.3.3.1.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "condition_list",
+      "key_entities": ["LowBeam"]
+    },
+    {
+      "id": "A16",
+      "category": "A",
+      "question": "日间行车灯(DRL)的开启需要满足哪些前置条件？",
+      "expected_answer": "近光灯off、位置灯off（或前雾灯off取决于配置）、DRL配置为有独立DRL、转向灯状态符合要求、电压大于9V",
+      "ground_truth_sections": ["3.3.7.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "condition_list",
+      "key_entities": ["DRL", "DayRunningLight"]
+    },
+    {
+      "id": "A17",
+      "category": "A",
+      "question": "转向灯闪烁的优先级从高到低如何排列？",
+      "expected_answer": "外部防盗报警闪烁 > 碰撞危险报警闪烁 > 紧急制动危险报警闪烁 > 门开双闪 > 转向指示闪烁 > 变道指示闪烁",
+      "ground_truth_sections": ["3.4.9.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "ordered_list",
+      "key_entities": ["TurnSignal", "HazardFlash"]
+    },
+    {
+      "id": "A18",
+      "category": "A",
+      "question": "灯光未关提醒的触发条件是什么？",
+      "expected_answer": "电源状态保持inactive 500ms后，位置灯点亮且不是自动功能点亮，驾驶员侧门开启时触发",
+      "ground_truth_sections": ["3.3.2.2.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "condition_list",
+      "key_entities": ["LightLeftOn"]
+    },
+    {
+      "id": "A19",
+      "category": "A",
+      "question": "碰撞解锁功能是由哪个信号触发的？",
+      "expected_answer": "ACU_CrashOutputSts信号，由ACU（气囊控制单元）发出",
+      "ground_truth_sections": ["6"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "short",
+      "key_entities": ["CrashUnlock", "ACU_CrashOutputSts"]
+    },
+    {
+      "id": "A20",
+      "category": "A",
+      "question": "PEPS_Warning_UID_LOW_BATT信号（0x272）在什么条件下输出？",
+      "expected_answer": "电源模式由Inactive切换到Convenience或Driving后第一次收到钥匙电量信息，连续3个点火周期钥匙电量都低时输出1:Warning持续10秒",
+      "ground_truth_sections": ["2.3.3.10"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "condition_list",
+      "key_entities": ["PEPS_Warning_UID_LOW_BATT"]
+    },
+    {
+      "id": "A21",
+      "category": "A",
+      "question": "BCM休眠需要满足什么条件？",
+      "expected_answer": "BCM进入网络休眠的条件包括：处于Inactive状态且无唤醒事件，系统进入低功耗模式",
+      "ground_truth_sections": ["2.4.1"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "condition_list",
+      "key_entities": ["BCM", "Sleep"]
+    },
+    {
+      "id": "A22",
+      "category": "A",
+      "question": "危险报警灯和转向灯同时激活时，系统的优先级处理逻辑是什么？",
+      "expected_answer": "当危险报警灯逻辑使能为on时，转向指示闪烁逻辑使能会被置为暂停(pending)，危险报警灯优先级高于转向灯",
+      "ground_truth_sections": ["3.3.9.2.1", "3.3.9.2.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["HazardFlash", "TurnIndicator"]
+    },
+
+    {
+      "id": "B01",
+      "category": "B",
+      "question": "如果钥匙失效（KeyLost），会影响哪些电源模式？",
+      "expected_answer": "钥匙失效会导致无法从Inactive进入Convenience（需要有效钥匙），同时Convenience模式下的功能也会受限。在Driving状态下钥匙失效可能会导致无法保持钥匙有效状态",
+      "ground_truth_sections": ["2.3.4.2.2", "2.3.3.4"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "impact_analysis",
+      "key_entities": ["KeyLost", "PEPS_KeyStatus", "Inactive", "Convenience", "Driving"]
+    },
+    {
+      "id": "B02",
+      "category": "B",
+      "question": "IGN1继电器故障会导致哪些信号失效？",
+      "expected_answer": "IGN1继电器故障会触发PEPS_IGN1RelayValidity=0x0:Invalid，影响PEPS_UsageMode和PEPS_PowerMode信号的输出，导致电源模式切换失败",
+      "ground_truth_sections": ["2.3.3.7"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "impact_analysis",
+      "key_entities": ["IGN1", "PEPS_IGN1RelayValidity", "PEPS_UsageMode"]
+    },
+    {
+      "id": "B03",
+      "category": "B",
+      "question": "VCU_ePTReady信号变为Not Active后，会影响哪些功能？",
+      "expected_answer": "VCU_ePTReady变为Not Active后，系统从Driving迁移到Convenience，发送PEPS_UsageMode=0x1:Convenience和PEPS_PowerMode=0x2:ON。所有依赖Driving模式的功能会被限制",
+      "ground_truth_sections": ["2.3.4.4.2"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "impact_analysis",
+      "key_entities": ["VCU_ePTReady", "Driving", "Convenience"]
+    },
+    {
+      "id": "B04",
+      "category": "B",
+      "question": "刹车踏板信号同时影响哪些模块和功能？",
+      "expected_answer": "刹车踏板信号影响：1)VMM-电源模式切换（进入Convenience和Driving需要刹车踩下）；2)ExteriorLight-刹车灯激活；3)紧急下电功能",
+      "ground_truth_sections": ["2.3.4.2.2", "2.3.4.3.2", "3.3.5.1"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "impact_analysis",
+      "key_entities": ["BrakePedal", "VMM", "ExteriorLight", "BrakeLight"]
+    },
+    {
+      "id": "B05",
+      "category": "B",
+      "question": "PEPS_UsageMode从Active变为Inactive，会影响哪些下游信号和功能？",
+      "expected_answer": "PEPS_UsageMode变为Inactive表示电源模式切换，影响：PEPS_PowerMode=0x0:OFF、IGN1继电器驱动关闭、PEPS_IGN1RelaySts=0x0:Inactive。所有依赖Convenience/Driving的功能（近光灯、转向灯、车窗等）将被关闭或限制",
+      "ground_truth_sections": ["2.3.4.3.1", "2.3.4.4.1"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "impact_analysis",
+      "key_entities": ["PEPS_UsageMode", "PEPS_PowerMode", "IGN1"]
+    },
+    {
+      "id": "B06",
+      "category": "B",
+      "question": "车速信号VehicleSpeed会影响哪些BCM功能？",
+      "expected_answer": "车速信号影响：1)钥匙搜索策略（≥15km/h停止搜索）；2)门锁自动上锁；3)紧急制动危险报警闪烁；4)灯光未关提醒",
+      "ground_truth_sections": ["2.3.3.6", "6", "3.3.9.6.1"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "impact_analysis",
+      "key_entities": ["VehicleSpeed", "ESC_VehicleSpeed"]
+    },
+    {
+      "id": "B07",
+      "category": "B",
+      "question": "BMSH_StsCC2充电连接状态信号如何影响电源模式切换？",
+      "expected_answer": "BMSH_StsCC2=0x0:Disconnect（充电器未连接）是进入Driving状态的前置条件之一。如果充电器连接，则无法进入Driving",
+      "ground_truth_sections": ["2.3.4.3.2"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["BMSH_StsCC2", "Driving"]
+    },
+    {
+      "id": "B08",
+      "category": "B",
+      "question": "电源模式变化时，IGN1继电器、PEPS_UsageMode、PEPS_PowerMode三个信号如何协同变化？",
+      "expected_answer": "三者协同：进入Convenience时，IGN1=Active, PEPS_UsageMode=0x1, PEPS_PowerMode=0x2；进入Driving时，IGN1=Active, PEPS_UsageMode=0x2, PEPS_PowerMode=0x2；进入Inactive时，IGN1=Inactive, PEPS_UsageMode=0x0, PEPS_PowerMode=0x0",
+      "ground_truth_sections": ["2.3.4.2.2", "2.3.4.3.1", "2.3.4.3.2", "2.3.4.4.1"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["IGN1", "PEPS_UsageMode", "PEPS_PowerMode"]
+    },
+    {
+      "id": "B09",
+      "category": "B",
+      "question": "遥控闭锁(RKE Lock)如何影响VMM状态和ExteriorLight功能？",
+      "expected_answer": "RKE闭锁触发VMM从Convenience迁移到Inactive，同时触发ExteriorLight外部闭锁反馈闪烁（所有门关闭且收到闭锁成功事件时激活）",
+      "ground_truth_sections": ["2.3.4.3.1", "3.3.9.9.1"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "impact_analysis",
+      "key_entities": ["RKE", "Lock", "ExteriorLight", "Inactive"]
+    },
+    {
+      "id": "B10",
+      "category": "B",
+      "question": "碰撞事件(Crash)如何同时影响门锁和灯光系统？",
+      "expected_answer": "碰撞事件触发：1)Lock-碰撞解锁（CrashUnlock），所有车门解锁；2)ExteriorLight-碰撞危险报警闪烁（周期800ms，占空比50%），持续激活直到关闭条件满足",
+      "ground_truth_sections": ["6", "3.3.9.7.1"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "impact_analysis",
+      "key_entities": ["Crash", "CrashUnlock", "HazardFlash"]
+    },
+    {
+      "id": "B11",
+      "category": "B",
+      "question": "方向盘转角信号如何影响转向灯和日行灯？",
+      "expected_answer": "转向开关信号（来自TCM或硬线）控制转向指示闪烁逻辑使能。转向灯工作时，根据配置日行灯可能被关闭（cfgDRLRegulationOption），以增强转向灯可见性",
+      "ground_truth_sections": ["3.3.7.1", "3.3.9.2.1"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["TurnSwitch", "DRL", "TurnIndicator"]
+    },
+    {
+      "id": "B12",
+      "category": "B",
+      "question": "PEPS无钥匙认证失败会导致哪些连锁反应？",
+      "expected_answer": "PIAS认证失败导致：钥匙有效性变为Invalid→Convenience模式下功能受限→无法进入Driving→系统可能迁移到Inactive→IGN1继电器关闭→所有便利功能停用",
+      "ground_truth_sections": ["9.2.1", "2.3.4.3.2"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "impact_analysis",
+      "key_entities": ["PIAS", "KeyValid", "Driving", "Convenience"]
+    },
+    {
+      "id": "B13",
+      "category": "B",
+      "question": "电压降至6V以下时，会影响哪些系统功能？",
+      "expected_answer": "电压低于6V进入Stop Voltage模式，系统功能停止。所有灯光（DRL、近光灯等）关闭（电压低于8.5V即关闭DRL），继电器驱动停止，CAN通信可能受限",
+      "ground_truth_sections": ["2.5", "3.3.7.2"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "impact_analysis",
+      "key_entities": ["Stop Voltage", "Low Voltage", "DRL"]
+    },
+    {
+      "id": "B14",
+      "category": "B",
+      "question": "钥匙电量低的检测逻辑是什么？检测后会触发哪些信号？",
+      "expected_answer": "检测逻辑：电源模式从Inactive切换到Convenience/Driving后首次收到钥匙电量信息，连续3个点火周期电量低则计数器累加。触发PEPS_Warning_UID_LOW_BATT(0x272)=0x1:Warning持续10秒",
+      "ground_truth_sections": ["2.3.3.10", "9.2.2.1"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["KeyLowBattery", "PEPS_Warning_UID_LOW_BATT"]
+    },
+    {
+      "id": "B15",
+      "category": "B",
+      "question": "制动踏板信号从踩下到松开，会触发哪些状态变化和信号输出？",
+      "expected_answer": "踩下：可能触发Inactive→Convenience（配合其他条件）或Convenience→Driving（配合D/R档和钥匙）；松开：如果在启动请求过程中松开刹车且档位切换到P/N，则切回Convenience。同时刹车灯输出跟随刹车信号状态",
+      "ground_truth_sections": ["2.3.4.2.2", "2.3.4.3.2", "2.3.4.3.3", "3.3.5.1"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["BrakePedal", "BrakeLight", "Convenience", "Driving"]
+    },
+    {
+      "id": "B16",
+      "category": "B",
+      "question": "ATWS防盗报警激活后，会影响哪些灯光和喇叭功能？",
+      "expected_answer": "ATWS Alarm状态触发：1)外部防盗报警闪烁（转向灯，周期1000ms占空比50%持续5分钟）；2)行车喇叭鸣叫（与闪烁一致但相位相反，持续30秒）",
+      "ground_truth_sections": ["3.3.9.11.1", "3.4.9.10.1"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "impact_analysis",
+      "key_entities": ["ATWS", "Alarm", "HazardFlash", "Horn"]
+    },
+    {
+      "id": "B17",
+      "category": "B",
+      "question": "BCM网络唤醒后，会触发哪些状态迁移和信号变化？",
+      "expected_answer": "网络唤醒触发Abandoned→Inactive迁移，发送PEPS_UsageMode=0x0:Inactive和PEPS_PowerMode=0x0:OFF。随后如果检测到门打开+解防+钥匙有效，则进入Convenience",
+      "ground_truth_sections": ["2.3.4.1.1", "2.4.2"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["NetworkWake", "Abandoned", "Inactive"]
+    },
+    {
+      "id": "B18",
+      "category": "B",
+      "question": "紧急制动事件如何影响转向灯和制动灯？",
+      "expected_answer": "紧急制动触发：ESC_HAZActive信号有效→转向灯激活紧急制动危险报警闪烁（周期280ms，占空比50%）；刹车灯同时由硬线刹车信号和CAN信号控制使能为on",
+      "ground_truth_sections": ["3.3.9.6.1", "3.3.5.1"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "impact_analysis",
+      "key_entities": ["EmergencyBrake", "ESC_HAZActive", "BrakeLight", "TurnSignal"]
+    },
+
+    {
+      "id": "C01",
+      "category": "C",
+      "question": "从Abandoned模式如何迁移到Driving模式？经过哪些中间状态？",
+      "expected_answer": "Abandoned→Inactive（网络唤醒）→Convenience（门打开+刹车+钥匙有效）→Driving（刹车+D/R档+钥匙有效+充电器未连接+StartRequest）",
+      "ground_truth_sections": ["2.3.4.1.1", "2.3.4.2.2", "2.3.4.3.2"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "path",
+      "key_entities": ["Abandoned", "Inactive", "Convenience", "Driving"]
+    },
+    {
+      "id": "C02",
+      "category": "C",
+      "question": "Driving模式可以迁移到哪些状态？各自的触发条件是什么？",
+      "expected_answer": "Driving可迁移到：1)Inactive（AVP激活/P/N档+长按危险警报灯7s以上/车辆静止）；2)Convenience（VCU_ePTReady=Not Active，即Ready状态关闭）",
+      "ground_truth_sections": ["2.3.4.4.1", "2.3.4.4.2"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "transition_list",
+      "key_entities": ["Driving", "Inactive", "Convenience"]
+    },
+    {
+      "id": "C03",
+      "category": "C",
+      "question": "Convenience模式有哪些退出路径？",
+      "expected_answer": "Convenience可退出到：1)Inactive（30分钟超时/闭锁/长按危险警报灯7s）；2)Driving（刹车+D/R档+钥匙有效+充电器未连接）；3)Convenience自身（启动请求取消后切回）",
+      "ground_truth_sections": ["2.3.4.3.1", "2.3.4.3.2", "2.3.4.3.3"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "transition_list",
+      "key_entities": ["Convenience", "Inactive", "Driving"]
+    },
+    {
+      "id": "C04",
+      "category": "C",
+      "question": "Inactive模式可以通过哪些方式进入Convenience？",
+      "expected_answer": "两种方式：1)主驾侧门打开+车辆解防状态；2)制动踏板踩下（车辆解防或非解防+钥匙有效）。且需满足触发条件为非解防状态制动踏板被踩下时执行相关输出",
+      "ground_truth_sections": ["2.3.4.2.2"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "transition_list",
+      "key_entities": ["Inactive", "Convenience"]
+    },
+    {
+      "id": "C05",
+      "category": "C",
+      "question": "从Driving进入Inactive需要满足什么条件？",
+      "expected_answer": "前置条件：处于Driving状态且非换电状态。触发条件（任一）：1)处于AVP激活状态；2)车辆静止+P/N档；3)车辆静止+P/N档+先踩刹车再长按危险警报灯7s以上",
+      "ground_truth_sections": ["2.3.4.4.1"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "condition_list",
+      "key_entities": ["Driving", "Inactive"]
+    },
+    {
+      "id": "C06",
+      "category": "C",
+      "question": "Convenience到Driving的迁移过程中，如果刹车松开或防盗认证失败会怎样？",
+      "expected_answer": "如果刹车松开、防盗认证失败、启动超时、或档位切换到P/N档，则切回Convenience状态而不是进入Driving",
+      "ground_truth_sections": ["2.3.4.3.3"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["Convenience", "Driving", "BrakePedal", "Immobilizer"]
+    },
+    {
+      "id": "C07",
+      "category": "C",
+      "question": "PEPS_PowerMode信号在状态迁移过程中如何变化？",
+      "expected_answer": "Inactive→Convenience时PEPS_PowerMode=0x2:ON；保持Convenience时=0x2:ON；启动请求过程中=0x4:START；进入Driving时=0x2:ON；回到Inactive时=0x0:OFF",
+      "ground_truth_sections": ["2.3.4.2.2", "2.3.4.3.1", "2.3.4.3.2", "2.3.4.4.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "detail",
+      "key_entities": ["PEPS_PowerMode"]
+    },
+    {
+      "id": "C08",
+      "category": "C",
+      "question": "是否存在状态自迁移（从某状态迁移到同状态）？",
+      "expected_answer": "存在。Convenience模式下触发启动请求后如果取消（刹车松开/防盗失败等），切回Convenience状态。Driving→Driving的迁移发生在Ready信号变化但重新进入Driving时",
+      "ground_truth_sections": ["2.3.4.3.3", "2.3.4.4.2"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["Convenience"]
+    },
+    {
+      "id": "C09",
+      "category": "C",
+      "question": "Convenience到Inactive的迁移中，定时器超时时间是多少？",
+      "expected_answer": "默认30分钟超时。当30分钟内无任何操作时，自动从Convenience迁移到Inactive",
+      "ground_truth_sections": ["2.3.4.3.1"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "easy", "answer_type": "short",
+      "key_entities": ["Convenience", "Inactive", "Timer"]
+    },
+    {
+      "id": "C10",
+      "category": "C",
+      "question": "迁移图中有多少条不同的迁移边？",
+      "expected_answer": "7条迁移边：Abandoned→Inactive, Inactive→Abandoned, Inactive→Convenience, Convenience→Inactive, Convenience→Driving, Driving→Inactive, Driving→Convenience",
+      "ground_truth_sections": ["2.3.4"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "easy", "answer_type": "short",
+      "key_entities": ["VMM"]
+    },
+    {
+      "id": "C11",
+      "category": "C",
+      "question": "启动请求(StartRequest)在状态迁移中起什么作用？超时时间是多少？",
+      "expected_answer": "StartRequest在Convenience→Driving过程中发出高脉冲请求，触发条件满足后执行。有15秒超时机制，超时后如果未完成则切回Convenience",
+      "ground_truth_sections": ["2.3.4.3.2", "2.3.4.3.3"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "detail",
+      "key_entities": ["StartRequest"]
+    },
+    {
+      "id": "C12",
+      "category": "C",
+      "question": "伴随回家功能(FollowMeHome)的计时器如何受车门状态影响？",
+      "expected_answer": "当伴我回家功能激活时计时器为cfgHSLTm秒。超时前任何门打开则计时器重载为180秒，所有门关上后重载为cfgHSLTm秒",
+      "ground_truth_sections": ["3.3.8"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["FollowMeHome", "cfgHSLTm"]
+    },
+    {
+      "id": "C13",
+      "category": "C",
+      "question": "位置灯的逻辑使能状态在什么条件下从On变为Off？",
+      "expected_answer": "当外部灯光开关处于OFF、组合开关在近光灯档且TccSts为OFF、灯光组合开关在OFF且电源切换到OFF档、Inactive条件下位置灯打开则触发延时结束后关闭",
+      "ground_truth_sections": ["3.3.2.1.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "condition_list",
+      "key_entities": ["PositionLight"]
+    },
+    {
+      "id": "C14",
+      "category": "C",
+      "question": "转向指示闪烁逻辑使能从On变为Off的条件有哪些？",
+      "expected_answer": "1)整车电源模式变为Inactive；2)相应方向的转向开关变为无效。关闭时如果危险报警灯逻辑使能为暂停则将其置为on",
+      "ground_truth_sections": ["3.3.9.2.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "condition_list",
+      "key_entities": ["TurnIndicator"]
+    },
+    {
+      "id": "C15",
+      "category": "C",
+      "question": "危险报警灯逻辑使能的状态转换流程是什么？",
+      "expected_answer": "Off→On（开关按下且碰撞报警off）→Pause（转向灯激活时）→On（转向灯off时恢复）→Off（开关再次按下）。紧急制动和碰撞事件也可触发独立使能",
+      "ground_truth_sections": ["3.3.9.5.1", "3.3.9.5.2", "3.3.9.2.1", "3.3.9.2.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["HazardFlash"]
+    },
+
+    {
+      "id": "D01",
+      "category": "D",
+      "question": "为什么车辆无法从Inactive进入Driving？",
+      "expected_answer": "因为Inactive不能直接进入Driving，必须先经过Convenience。需要：1)从Inactive进入Convenience（门打开+解防状态，或刹车踩下+钥匙有效）；2)从Convenience进入Driving（刹车+D/R档+钥匙有效+充电器未连接+StartRequest）。缺少任何中间步骤或条件都无法到达",
+      "ground_truth_sections": ["2.3.4.2.2", "2.3.4.3.2"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "reasoning",
+      "key_entities": ["Inactive", "Convenience", "Driving"]
+    },
+    {
+      "id": "D02",
+      "category": "D",
+      "question": "在Convenience状态下，满足什么条件才能进入Driving？",
+      "expected_answer": "需要同时满足：1)刹车踏板踩下；2)钥匙有效；3)充电器未连接（BMSH_StsCC2=0x0:Disconnect）；4)收到D/R档操作；5)硬线信号StartRequest发出高脉冲请求；6)动力使能成功；7)防盗认证成功。有15秒超时机制",
+      "ground_truth_sections": ["2.3.4.3.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "condition_list",
+      "key_entities": ["Convenience", "Driving", "StartRequest"]
+    },
+    {
+      "id": "D03",
+      "category": "D",
+      "question": "为什么充电器连接时不能进入Driving状态？",
+      "expected_answer": "充电器未连接（BMSH_StsCC2=0x0:Disconnect）是进入Driving的前置条件之一。如果充电器连接，出于安全考虑（电动汽车在充电时不应启动动力系统），系统阻止进入Driving",
+      "ground_truth_sections": ["2.3.4.3.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "reasoning",
+      "key_entities": ["BMSH_StsCC2", "Driving"]
+    },
+    {
+      "id": "D04",
+      "category": "D",
+      "question": "为什么有时候踩下刹车仍然无法进入Convenience模式？",
+      "expected_answer": "踩下刹车只是进入Convenience的触发条件之一（通过||逻辑）。还需要车辆处于解防状态或者处于非解防状态且有有效钥匙。如果没有有效钥匙且车辆处于设防状态，踩刹车无法进入Convenience",
+      "ground_truth_sections": ["2.3.4.2.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["Inactive", "Convenience", "BrakePedal"]
+    },
+    {
+      "id": "D05",
+      "category": "D",
+      "question": "在什么条件下Convenience会自动退回到Inactive？",
+      "expected_answer": "三种条件（任一满足）：1)默认30分钟超时无操作；2)车辆静止+P/N档+RKE闭锁/机械钥匙闭锁/远程闭锁；3)车辆静止+P/N档+先踩刹车再长按危险警报灯开关7秒以上",
+      "ground_truth_sections": ["2.3.4.3.1"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "condition_list",
+      "key_entities": ["Convenience", "Inactive"]
+    },
+    {
+      "id": "D06",
+      "category": "D",
+      "question": "为什么钥匙有效是进入Convenience的必要条件之一？",
+      "expected_answer": "Convenience模式允许用户使用许多便利功能，必须检测并批准钥匙以防止未授权使用。只有解防状态（已认证）或非解防状态+钥匙有效才能进入",
+      "ground_truth_sections": ["2.3.1", "2.3.4.2.2"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "reasoning",
+      "key_entities": ["KeyValid", "Convenience"]
+    },
+    {
+      "id": "D07",
+      "category": "D",
+      "question": "PEPS_UsageMode=0x2:Driving必须满足哪些前置条件？",
+      "expected_answer": "必须满足：处于Convenience状态、刹车踩下、钥匙有效、充电器未连接→收到D/R档→StartRequest高脉冲→动力使能成功+防盗成功→PEPS_UsageMode=0x2:Driving",
+      "ground_truth_sections": ["2.3.4.3.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "condition_chain",
+      "key_entities": ["PEPS_UsageMode", "Driving"]
+    },
+    {
+      "id": "D08",
+      "category": "D",
+      "question": "为什么近光灯在Inactive模式下不会点亮？",
+      "expected_answer": "近光灯激活的前置条件包括电源模式为Convenience或Driving且非远程模式。Inactive模式下不满足此条件，因此近光灯逻辑使能为Off",
+      "ground_truth_sections": ["3.3.3.1.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "reasoning",
+      "key_entities": ["LowBeam", "Inactive"]
+    },
+    {
+      "id": "D09",
+      "category": "D",
+      "question": "DRL在什么情况下不会被激活，即使动力系统就绪？",
+      "expected_answer": "即使动力就绪，以下条件也会阻止DRL激活：1)近光灯已开启；2)位置灯开启且cfgDRLRegulationOption=0x0；3)转向灯工作且配置为关闭DRL；4)电压低于9V；5)P/N档+灯光OFF+车辆静止",
+      "ground_truth_sections": ["3.3.7.1", "3.3.7.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "condition_list",
+      "key_entities": ["DRL"]
+    },
+    {
+      "id": "D10",
+      "category": "D",
+      "question": "钥匙搜索流程在什么条件下被触发？什么条件下被抑制？",
+      "expected_answer": "触发：在非Driving状态下钥匙有效状态应保持60秒，60秒内未检测到有效钥匙则进入搜索流程。抑制：车速≥15km/h时不寻找钥匙（安全考虑），并发送PEPS_Warning_No_key_found=0x1",
+      "ground_truth_sections": ["2.3.3.4", "2.3.3.6"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["KeySearch", "VehicleSpeed"]
+    },
+    {
+      "id": "D11",
+      "category": "D",
+      "question": "后雾灯为什么有时无法激活？",
+      "expected_answer": "后雾灯激活需要同时满足：1)位置灯逻辑使能为on；2)近光灯逻辑使能为on；3)电源状态为Convenience或Driving；4)后雾灯逻辑使能当前为off；5)后雾灯开关由Unpressed变为Pressed。任一条件不满足则无法激活",
+      "ground_truth_sections": ["3.3.4.1.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "condition_list",
+      "key_entities": ["RearFogLight"]
+    },
+    {
+      "id": "D12",
+      "category": "D",
+      "question": "紧急制动危险报警闪烁为什么在Inactive模式下不会触发？",
+      "expected_answer": "紧急制动危险报警闪烁的前置条件包括整车电源模式为Convenience或Driving。Inactive模式下不满足此条件，即使收到ESC_HAZActive信号也不会触发闪烁",
+      "ground_truth_sections": ["3.3.9.6.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "reasoning",
+      "key_entities": ["EmergencyBrake", "Inactive"]
+    },
+    {
+      "id": "D13",
+      "category": "D",
+      "question": "PowerMode=START(0x4)在什么条件下发送？发送后可能的结果是什么？",
+      "expected_answer": "启动请求过程中发送PEPS_PowerMode=0x4:START。结果：如果动力使能+防盗成功→进入Driving(0x2:ON)；如果刹车松开/防盗失败/超时/档位P/N→切回Convenience(0x2:ON)。有15秒超时",
+      "ground_truth_sections": ["2.3.4.3.2", "2.3.4.3.3"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["PEPS_PowerMode", "START"]
+    },
+    {
+      "id": "D14",
+      "category": "D",
+      "question": "车辆的防盗状态如何影响电源模式切换？",
+      "expected_answer": "解防状态下：主驾侧门打开即可从Inactive进入Convenience。非解防状态下：必须制动踏板踩下且钥匙有效才能进入Convenience。设防状态下没有有效钥匙则无法切换",
+      "ground_truth_sections": ["2.3.4.2.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "reasoning",
+      "key_entities": ["Disarm", "Arm", "Convenience"]
+    },
+    {
+      "id": "D15",
+      "category": "D",
+      "question": "IG OFF后系统如何判断是否发送灯光未关提醒？需要同时满足哪些时序条件？",
+      "expected_answer": "IG OFF后，电源状态保持inactive 500ms，然后检查：位置灯是否点亮（且不是自动功能点亮）、驾驶员侧门是否开启。全部满足后发送BCM_LightLeftOn=0x1给仪表。任一条件不满足则发送关闭指令",
+      "ground_truth_sections": ["3.3.2.2.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "condition_chain",
+      "key_entities": ["IG", "LightLeftOn", "Inactive"]
+    },
+
+    {
+      "id": "E01",
+      "category": "E",
+      "question": "追溯从Inactive到Driving的完整路径，列出每一步的触发条件和信号变化",
+      "expected_answer": "路径：Inactive→Convenience→Driving。第一步：Inactive→Convenience，前置条件（处于Inactive），触发（门打开+解防 或 刹车+钥匙有效），动作（IGN1驱动高电平，PEPS_UsageMode=0x1，PEPS_PowerMode=0x2，IGN1RelaySts=0x1）。第二步：Convenience→Driving，前置条件（刹车+钥匙有效+充电器未连接），触发（D/R档+StartRequest），动作（PEPS_UsageMode=0x2，PEPS_PowerMode=0x2）",
+      "ground_truth_sections": ["2.3.4.2.2", "2.3.4.3.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "path_detail",
+      "key_entities": ["Inactive", "Convenience", "Driving"]
+    },
+    {
+      "id": "E02",
+      "category": "E",
+      "question": "如果从Abandoned开始，经过哪些步骤才能实现远程启动进入Driving？",
+      "expected_answer": "Abandoned→(网络唤醒)→Inactive→(非解防+刹车+钥匙有效)→Convenience→(刹车+D/R档+钥匙有效+充电器未连接+StartRequest)→Driving。远程模式下需要额外的远程认证步骤",
+      "ground_truth_sections": ["2.3.4.1.1", "2.3.4.2.2", "2.3.4.3.2"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "path_detail",
+      "key_entities": ["Abandoned", "Driving", "RemoteStart"]
+    },
+    {
+      "id": "E03",
+      "category": "E",
+      "question": "从Driving状态，经过哪些迁移可以到达Abandoned？",
+      "expected_answer": "Driving→Inactive（AVP激活/P/N/长按危险警报灯7s）→Abandoned（BCM进入网络休眠）。最短路径2跳",
+      "ground_truth_sections": ["2.3.4.4.1", "2.3.4.2.1"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "path",
+      "key_entities": ["Driving", "Inactive", "Abandoned"]
+    },
+    {
+      "id": "E04",
+      "category": "E",
+      "question": "是否存在从Abandoned到Driving的路径？如果有，最短需要几步？",
+      "expected_answer": "存在。最短路径：Abandoned→Inactive→Convenience→Driving，共3步（3跳）。如果考虑Driving→Convenience→Driving的循环，存在更长路径",
+      "ground_truth_sections": ["2.3.4.1.1", "2.3.4.2.2", "2.3.4.3.2"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "path",
+      "key_entities": ["Abandoned", "Driving"]
+    },
+    {
+      "id": "E05",
+      "category": "E",
+      "question": "追溯钥匙信号(PEPS_KeyStatus)从有效到失效的完整影响链",
+      "expected_answer": "PEPS_KeyStatus有效→允许Inactive→Convenience→可进入Driving。失效链：PEPS_KeyStatus=Invalid→钥匙有效状态保持60秒→进入钥匙搜索→可能触发PEPS_Warning_No_key_found→系统无法保持Convenience/Driving→迁移到Inactive→IGN1关闭→便利功能停用→如果持续休眠→Abandoned",
+      "ground_truth_sections": ["2.3.3.4", "2.3.3.5", "2.3.3.6", "2.3.4.3.1"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "impact_chain",
+      "key_entities": ["PEPS_KeyStatus", "KeyValid", "KeySearch"]
+    },
+    {
+      "id": "E06",
+      "category": "E",
+      "question": "IGN1继电器从Active变为Inactive的完整因果链是什么？",
+      "expected_answer": "触发链：某条件触发状态迁移（如30分钟超时/闭锁/启动请求失败）→进入Inactive→IGN1继电器驱动输出低电平→IGN1继电器关闭→发送PEPS_IGN1RelaySts=0x0:Inactive→发送PEPS_UsageMode=0x0:Inactive→发送PEPS_PowerMode=0x0:OFF。如果IGN1继电器有故障，还会发送PEPS_IGN1RelayValidity=0x0:Invalid",
+      "ground_truth_sections": ["2.3.4.3.1", "2.3.4.4.1", "2.3.3.7"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "impact_chain",
+      "key_entities": ["IGN1", "Inactive"]
+    },
+    {
+      "id": "E07",
+      "category": "E",
+      "question": "转向灯从正常闪烁变为危险报警闪烁的完整触发路径是什么？",
+      "expected_answer": "路径1（开关触发）：危险报警开关按下→危险报警逻辑使能on→转向指示逻辑使能off→如果转向指示正在闪烁则置为暂停。路径2（紧急制动）：ESC_HAZActive有效→紧急制动危险报警使能on→周期280ms。路径3（碰撞）：碰撞解锁触发→碰撞危险报警使能on→周期800ms。路径4（防盗）：ATWS Alarm→外部防盗报警使能on→周期1000ms",
+      "ground_truth_sections": ["3.3.9.5.1", "3.3.9.6.1", "3.3.9.7.1", "3.3.9.11.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "path_detail",
+      "key_entities": ["TurnSignal", "HazardFlash"]
+    },
+    {
+      "id": "E08",
+      "category": "E",
+      "question": "从钥匙插入(KeyIn)到发动机启动(Driving)的完整信号链是什么？",
+      "expected_answer": "KeyIn→PEPS_KeyStatus=Valid→(解防状态+门打开 或 刹车+钥匙有效)→进入Convenience→IGN1=Active→PEPS_UsageMode=0x1:Convenience→PEPS_PowerMode=0x2:ON→(刹车踩下+钥匙有效+充电器未连接)→D/R档→StartRequest高脉冲→PEPS_PowerMode=0x4:START→(动力使能成功+防盗成功)→PEPS_UsageMode=0x2:Driving",
+      "ground_truth_sections": ["2.3.4.2.2", "2.3.4.3.2"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "impact_chain",
+      "key_entities": ["KeyIn", "Driving", "StartRequest"]
+    },
+    {
+      "id": "E09",
+      "category": "E",
+      "question": "碰撞事件(Crash)的信号传播路径是什么？从碰撞发生到所有相关系统响应的完整链路",
+      "expected_answer": "ACU_CrashOutputSts=Active→1)Lock: 碰撞解锁→所有车门解锁；2)ExteriorLight: 碰撞危险报警闪烁使能on→周期800ms/50%→超过4秒+危险报警开关按下→关闭。3)如果同时触发紧急制动→ESC_HAZActive→紧急制动危险报警使能。碰撞闪烁优先级为1（最高），优先于紧急制动和普通转向",
+      "ground_truth_sections": ["3.3.9.7.1", "3.3.9.7.2", "3.4.9.1", "6"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "impact_chain",
+      "key_entities": ["Crash", "ACU_CrashOutputSts", "CrashUnlock", "HazardFlash"]
+    },
+    {
+      "id": "E10",
+      "category": "E",
+      "question": "电压从12V降到5V的完整系统响应链是什么？",
+      "expected_answer": "12V→9V（正常电压范围）→低于9V但高于6V（低电压Low Voltage，部分功能受限，DRL在8.5V时关闭）→低于6V（停止电压Stop Voltage，系统功能停止，所有灯光关闭，继电器停止，进入最低功耗模式）。阈值：正常进入↑9V/退出↓16V→低电压进入↑6.5V/退出↓8.5V→停止电压进入↓6V",
+      "ground_truth_sections": ["2.5", "3.3.7.2"],
+      "requires_kg": true, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "impact_chain",
+      "key_entities": ["Voltage", "Stop Voltage", "Low Voltage", "Normal Voltage"]
+    },
+
+    {
+      "id": "F01",
+      "category": "F",
+      "question": "Inactive状态下，同时满足'BCM进入网络休眠'和'主驾侧门打开'时，系统应该进入Abandoned还是Convenience？",
+      "expected_answer": "文档中这两条规则有不同的目标状态：BCM休眠→Abandoned，门打开→Convenience。这两条规则的条件集不完全重叠（休眠是自动触发，门打开是用户行为），实际执行取决于哪个条件先满足。这不是真正的冲突，而是同一源状态的两个不同出口",
+      "ground_truth_sections": ["2.3.4.2.1", "2.3.4.2.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "conflict_analysis",
+      "key_entities": ["Inactive", "Abandoned", "Convenience"]
+    },
+    {
+      "id": "F02",
+      "category": "F",
+      "question": "转向灯和危险报警灯同时激活时，是否存在规则冲突？优先级如何解决？",
+      "expected_answer": "不存在冲突，文档明确规定了优先级：危险报警灯使能on时，转向指示闪烁逻辑使能置为暂停(pending)，危险报警灯关闭后自动恢复。这是通过规则引擎的OVERRIDE关系实现的，不是冲突",
+      "ground_truth_sections": ["3.3.9.2.1", "3.3.9.2.2", "3.3.9.5.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "conflict_analysis",
+      "key_entities": ["TurnSignal", "HazardFlash"]
+    },
+    {
+      "id": "F03",
+      "category": "F",
+      "question": "不同的危险报警闪烁类型（防盗/碰撞/紧急制动/开关）之间是否存在冲突？",
+      "expected_answer": "不存在冲突，因为它们有明确的优先级排序（1-4级）。闪烁周期、占空比、持续时间各不相同：防盗1000ms/50%/5min，碰撞800ms/50%/持续，紧急制动280ms/50%/持续，开关800ms/50%/直到关闭。高优先级可以抢占低优先级",
+      "ground_truth_sections": ["3.4.9.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "conflict_analysis",
+      "key_entities": ["HazardFlash", "Priority"]
+    },
+    {
+      "id": "F04",
+      "category": "F",
+      "question": "Convenience状态下，'30分钟超时'规则和'踩刹车进入Driving'规则是否冲突？",
+      "expected_answer": "不冲突。30分钟超时是一个后台定时器规则（优先级较低），用户操作（踩刹车）会重置定时器或产生新的迁移。只要用户有操作，30分钟超时就不会触发。这是一个典型的定时器与事件触发的关系",
+      "ground_truth_sections": ["2.3.4.3.1", "2.3.4.3.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "conflict_analysis",
+      "key_entities": ["Convenience", "Timer"]
+    },
+    {
+      "id": "F05",
+      "category": "F",
+      "question": "如果'位置灯激活'和'进入Inactive模式'两个条件同时满足，后雾灯应该保持On还是变为Off？",
+      "expected_answer": "后雾灯变为Off。因为后雾灯关闭条件包括'电源状态变为Inactive'，这个条件的优先级高于'位置灯激活'的前提条件。系统设计为电源模式切换时关闭所有非必要负载",
+      "ground_truth_sections": ["3.3.4.1.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "conflict_analysis",
+      "key_entities": ["RearFogLight", "Inactive", "PositionLight"]
+    },
+    {
+      "id": "F06",
+      "category": "F",
+      "question": "DRL的激活和关闭条件是否存在重叠区间导致闪烁（快速开关）？",
+      "expected_answer": "存在潜在的重叠风险区间。例如：近光灯开启→DRL关闭，但同时动力就绪→DRL激活。文档通过配置参数cfgDRLRegulationOption来控制此行为。如果配置为'Keep previous status'则保持之前状态，避免闪烁",
+      "ground_truth_sections": ["3.3.7.1", "3.3.7.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "conflict_analysis",
+      "key_entities": ["DRL", "LowBeam"]
+    },
+    {
+      "id": "F07",
+      "category": "F",
+      "question": "VMM状态机中是否存在非确定性迁移（同一状态同一条件可迁移到两个不同目标）？",
+      "expected_answer": "不存在。每个迁移都有不同的guard条件组合。Convenience有两个出口（Inactive和Driving）但guard条件互斥：超时/闭锁→Inactive；刹车+D/R+钥匙→Driving。这是确定性状态机",
+      "ground_truth_sections": ["2.3.4.3.1", "2.3.4.3.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "conflict_analysis",
+      "key_entities": ["Convenience", "Deterministic"]
+    },
+    {
+      "id": "F08",
+      "category": "F",
+      "question": "PEPS_PowerMode=START(0x4)期间，如果收到VCU_ePTReady=Not Active会发生什么？",
+      "expected_answer": "这会导致冲突：START表示正在启动过程，但ePTReady=Not Active表示动力未就绪。文档中规定了15秒超时机制和启动失败→切回Convenience的规则。如果启动超时或防盗失败，START会被取消并回退到Convenience(0x2:ON)",
+      "ground_truth_sections": ["2.3.4.3.2", "2.3.4.3.3", "2.3.4.4.2"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "conflict_analysis",
+      "key_entities": ["PEPS_PowerMode", "START", "VCU_ePTReady"]
+    },
+    {
+      "id": "F09",
+      "category": "F",
+      "question": "外部闭锁反馈闪烁和外部解锁反馈闪烁是否会同时激活？",
+      "expected_answer": "不会同时激活。闭锁反馈闪烁的激活条件发生在Inactive模式（所有门关闭+RKE闭锁成功），而解锁反馈闪烁在收到RKE解锁成功时激活。这两个事件是互斥的——不可能同时收到闭锁和解锁指令",
+      "ground_truth_sections": ["3.3.9.9.1", "3.3.9.10.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "medium", "answer_type": "conflict_analysis",
+      "key_entities": ["LockFeedback", "UnlockFeedback"]
+    },
+    {
+      "id": "F10",
+      "category": "F",
+      "question": "如果有两条规则的条件重叠但动作不同，BCM如何决定执行哪条？举例说明",
+      "expected_answer": "BCM通过优先级和guard条件细化来解决。例如：紧急制动危险报警（优先级2）和碰撞危险报警（优先级1）条件可能重叠（都有ESC相关信号），但碰撞优先级更高会抢占。另一个例子：DRL激活/关闭通过配置参数和Hysteresis防止振荡",
+      "ground_truth_sections": ["3.4.9.1", "3.3.7"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": false,
+      "difficulty": "hard", "answer_type": "conflict_analysis",
+      "key_entities": ["Priority", "ConflictResolution"]
+    },
+
+    {
+      "id": "G01",
+      "category": "G",
+      "question": "VMM状态机中是否存在不可达的状态？",
+      "expected_answer": "不存在不可达状态。所有4个状态（Abandoned、Inactive、Convenience、Driving）都有入边。Abandoned是最深休眠但可通过网络唤醒进入Inactive。系统形成了强连通分量",
+      "ground_truth_sections": ["2.3.4"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "analysis",
+      "key_entities": ["VMM", "Reachable"]
+    },
+    {
+      "id": "G02",
+      "category": "G",
+      "question": "VMM状态机中是否存在死锁状态（无法退出的状态）？",
+      "expected_answer": "不存在死锁。每个状态都有至少一条出边：Abandoned→Inactive, Inactive→Abandoned/Convenience, Convenience→Inactive/Driving, Driving→Inactive/Convenience。所有状态都可以退出",
+      "ground_truth_sections": ["2.3.4"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "analysis",
+      "key_entities": ["VMM", "Deadlock"]
+    },
+    {
+      "id": "G03",
+      "category": "G",
+      "question": "如果Abandoned状态没有唤醒机制，会对系统造成什么影响？",
+      "expected_answer": "如果Abandoned没有唤醒机制，系统将永远无法从最深休眠中恢复，导致车辆无法启动。幸运的是文档定义了网络唤醒信号可以触发Abandoned→Inactive迁移，不存在此问题",
+      "ground_truth_sections": ["2.3.4.1.1", "2.4.2"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "analysis",
+      "key_entities": ["Abandoned", "WakeUp"]
+    },
+    {
+      "id": "G04",
+      "category": "G",
+      "question": "是否存在从Driving直接回到Abandoned的路径？如果没有，最短需要几步？",
+      "expected_answer": "不存在直接路径。最短需要2步：Driving→Inactive（AVP激活/P/N/长按危险警报灯）→Abandoned（BCM进入网络休眠）。设计上不允许从驾驶状态直接进入最深休眠，确保安全",
+      "ground_truth_sections": ["2.3.4.4.1", "2.3.4.2.1"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "analysis",
+      "key_entities": ["Driving", "Abandoned"]
+    },
+    {
+      "id": "G05",
+      "category": "G",
+      "question": "VMM状态机的强连通分量包含哪些状态？",
+      "expected_answer": "所有4个状态（Abandoned、Inactive、Convenience、Driving）属于同一个强连通分量。从任意状态可以到达任意其他状态（可能需要多步），状态机设计为全连通",
+      "ground_truth_sections": ["2.3.4"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "analysis",
+      "key_entities": ["VMM", "SCC"]
+    },
+    {
+      "id": "G06",
+      "category": "G",
+      "question": "是否存在两个状态之间双向迁移的情况？举例说明",
+      "expected_answer": "存在多对双向迁移：Inactive⇄Abandoned（休眠⇄唤醒）、Inactive⇄Convenience（进入⇄退出便利模式）、Convenience⇄Driving（启动⇄停止驾驶）。但Driving⇄Abandoned没有直接双向迁移（需经过Inactive）",
+      "ground_truth_sections": ["2.3.4"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "medium", "answer_type": "analysis",
+      "key_entities": ["VMM", "Bidirectional"]
+    },
+    {
+      "id": "G07",
+      "category": "G",
+      "question": "如果移除Convenience状态，哪些迁移路径会断开？",
+      "expected_answer": "如果移除Convenience：1)Inactive无法直接进入Driving；2)Driving无法退回到Convenience（只能直接到Inactive）；3)所有依赖Convenience模式的功能（近光灯、转向灯、DRL、后雾灯等）将失去激活条件。系统变为线性Inactive⇄Driving，失去重要的中间便利模式",
+      "ground_truth_sections": ["2.3.4"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "analysis",
+      "key_entities": ["Convenience"]
+    },
+    {
+      "id": "G08",
+      "category": "G",
+      "question": "VMM状态迁移图中是否存在无guard条件的状态循环（可能造成活锁）？",
+      "expected_answer": "不存在无guard的循环。所有迁移都有明确的触发条件：休眠需要网络休眠信号，唤醒需要网络唤醒信号，进入Convenience需要门/刹车+钥匙，进入Driving需要刹车+档位+钥匙+充电器状态等。没有无条件自动循环",
+      "ground_truth_sections": ["2.3.4"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "analysis",
+      "key_entities": ["VMM", "Livelock"]
+    },
+    {
+      "id": "G09",
+      "category": "G",
+      "question": "电压管理模式（Stop/Low/Normal/High）是否也应建模为独立状态并入状态机？",
+      "expected_answer": "电压管理模式与电源模式是正交的。电压模式由硬件电压决定（自动切换），电源模式由用户行为和系统逻辑决定。两者应建模为并行的正交状态机：电压变化可以触发电源模式迁移（如Low Voltage时Convenience功能受限），但不改变电源模式的命名",
+      "ground_truth_sections": ["2.5", "2.3.1"],
+      "requires_kg": false, "requires_rules": true, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "analysis",
+      "key_entities": ["VoltageMode", "PowerMode"]
+    },
+    {
+      "id": "G10",
+      "category": "G",
+      "question": "从系统设计角度看，VMM状态机为什么需要Convenience这个中间状态？能否去掉？",
+      "expected_answer": "不能去掉。Convenience是关键的中间状态：1)安全隔离——用户可以在不启动发动机的情况下使用便利功能（收音机、灯光等）；2)认证缓冲——允许钥匙认证和用户意图确认后再启动；3)电源管理——在低电压时可以限制功能而不必完全关闭；4)故障恢复——启动失败时回退到Convenience而非完全退出",
+      "ground_truth_sections": ["2.3.1", "2.3.4"],
+      "requires_kg": false, "requires_rules": false, "requires_sm": true,
+      "difficulty": "hard", "answer_type": "analysis",
+      "key_entities": ["Convenience", "VMM"]
+    }
+  ]
+}

@@ -1,0 +1,245 @@
+{
+  "description": "BCM-RAG Golden Query Dataset — manually annotated queries for regression testing",
+  "version": "1.0",
+  "created": "2026-06-17",
+  "queries": [
+    {
+      "query": "VMM电源管理模式有哪些？",
+      "expected_module": "VMM",
+      "expected_section": "2.3.1",
+      "question_type": "factual",
+      "notes": "Should return state definitions: Abandoned, Inactive, Convenience, Driving"
+    },
+    {
+      "query": "车窗防夹功能如何检测和反应？",
+      "expected_module": "Window",
+      "expected_section": "",
+      "question_type": "reasoning",
+      "notes": "Should return anti-pinch detection logic and reaction"
+    },
+    {
+      "query": "ExteriorLight的配置参数有哪些？",
+      "expected_module": "ExteriorLight",
+      "expected_section": "3.2.4.1",
+      "question_type": "factual",
+      "notes": "Should return NVM parameter config table"
+    },
+    {
+      "query": "IGN1继电器由谁控制？控制逻辑是什么？",
+      "expected_module": "VMM",
+      "expected_section": "",
+      "question_type": "reasoning",
+      "notes": "IGN1 relay controlled by VMM based on power mode transitions"
+    },
+    {
+      "query": "门锁自动上锁的触发条件是什么？",
+      "expected_module": "Lock",
+      "expected_section": "",
+      "question_type": "factual",
+      "notes": "Auto-lock conditions via speed/door state"
+    },
+    {
+      "query": "雨刮间歇模式如何工作？",
+      "expected_module": "Wiper",
+      "expected_section": "",
+      "question_type": "reasoning",
+      "notes": "Wiper intermittent mode with timer logic"
+    },
+    {
+      "query": "CAN信号PEPS_UsageMode有哪些取值？",
+      "expected_module": "VMM",
+      "expected_section": "",
+      "question_type": "factual",
+      "notes": "Signal coding: 0x0=Inactive, 0x1=Convenience, 0x2=Driving, 0x3=Invalid"
+    },
+    {
+      "query": "近光灯的激活逻辑是什么？",
+      "expected_module": "ExteriorLight",
+      "expected_section": "3.3.3.1.1",
+      "question_type": "factual",
+      "notes": "Low beam activation: position light on + convenience/driving + switch on"
+    },
+    {
+      "query": "BCM休眠条件有哪些？",
+      "expected_module": "VMM",
+      "expected_section": "2.4.1",
+      "question_type": "factual",
+      "notes": "Sleep conditions for BCM network sleep"
+    },
+    {
+      "query": "转向灯优先级管理规则是什么？",
+      "expected_module": "ExteriorLight",
+      "expected_section": "3.4.9.1",
+      "question_type": "reasoning",
+      "notes": "Turn signal priority: external alarm > crash > emergency brake > door open..."
+    },
+    {
+      "query": "什么是Abandoned模式？",
+      "expected_module": "VMM",
+      "expected_section": "2.3.1",
+      "question_type": "factual",
+      "notes": "Final sleep mode, lowest power consumption"
+    },
+    {
+      "query": "DTC故障码的检测和恢复机制是什么？",
+      "expected_module": "Window",
+      "expected_section": "",
+      "question_type": "diagnostic",
+      "notes": "Fault detection, reaction, and recovery for DTC codes"
+    },
+    {
+      "query": "碰撞解锁功能如何触发？",
+      "expected_module": "Lock",
+      "expected_section": "",
+      "question_type": "reasoning",
+      "notes": "Crash unlock triggered by ACU_CrashOutputSts signal"
+    },
+    {
+      "query": "BCM如何判断钥匙电量低？",
+      "expected_module": "VMM",
+      "expected_section": "2.3.3.10",
+      "question_type": "reasoning",
+      "notes": "Key low battery detection: 3 consecutive ignition cycles"
+    },
+    {
+      "query": "日间行车灯的开启和关闭条件是什么？",
+      "expected_module": "ExteriorLight",
+      "expected_section": "3.3.7",
+      "question_type": "factual",
+      "notes": "DRL activation: low beam off, DRL config, voltage > 9V, power ready"
+    },
+    {
+      "query": "危险报警灯和转向灯的优先级关系是什么？",
+      "expected_module": "ExteriorLight",
+      "expected_section": "3.3.9",
+      "question_type": "reasoning",
+      "notes": "Hazard light has priority over turn signal, turn signal paused"
+    },
+    {
+      "query": "后雾灯的激活和关闭条件？",
+      "expected_module": "ExteriorLight",
+      "expected_section": "3.3.4",
+      "question_type": "factual",
+      "notes": "Rear fog: position+low beam on, convenience/driving, switch pressed"
+    },
+    {
+      "query": "车窗GlobalClose功能是什么？",
+      "expected_module": "Window",
+      "expected_section": "",
+      "question_type": "factual",
+      "notes": "Global close: one-click close all windows via key fob"
+    },
+    {
+      "query": "PEPS无钥匙启动认证流程是什么？",
+      "expected_module": "RemoteControl",
+      "expected_section": "9.2.1",
+      "question_type": "reasoning",
+      "notes": "PIAS authentication flow with LF/RF"
+    },
+    {
+      "query": "BCM唤醒条件有哪些？",
+      "expected_module": "VMM",
+      "expected_section": "2.4.2",
+      "question_type": "factual",
+      "notes": "Wake-up conditions: CAN wake, network management, hardware signals"
+    },
+    {
+      "query": "电压低于6V时系统行为是什么？",
+      "expected_module": "VMM",
+      "expected_section": "2.5",
+      "question_type": "factual",
+      "notes": "Stop voltage mode: enter at 6V falling, exit at 6.5V rising"
+    },
+    {
+      "query": "紧急制动危险报警闪烁何时激活？",
+      "expected_module": "ExteriorLight",
+      "expected_section": "3.3.9.6.1",
+      "question_type": "factual",
+      "notes": "Emergency brake hazard flash: ESC_HAZActive or VCU_HB_DoubleFlashLampOn"
+    },
+    {
+      "query": "灯光未关提醒的触发条件是什么？",
+      "expected_module": "ExteriorLight",
+      "expected_section": "3.3.2.2.1",
+      "question_type": "factual",
+      "notes": "Light left on warning: inactive 500ms + position light on + driver door open"
+    },
+    {
+      "query": "电源模式从Convenience进入Driving需要什么条件？",
+      "expected_module": "VMM",
+      "expected_section": "2.3.4.3.2",
+      "question_type": "reasoning",
+      "notes": "Driving entry: brake + key valid + no charger + D/R gear + StartRequest"
+    },
+    {
+      "query": "系统如何响应IG OFF后的节电控制？",
+      "expected_module": "InteriorLight",
+      "expected_section": "4.4.2",
+      "question_type": "reasoning",
+      "notes": "Power saving: entry actions, relay control after IG OFF"
+    },
+    {
+      "query": "VMM的PEPS_UsageMode信号编码定义是什么？",
+      "expected_module": "VMM",
+      "expected_section": "2.2.1.1",
+      "question_type": "factual",
+      "notes": "PEPS_UsageMode signal coding table in VMM section"
+    },
+    {
+      "query": "InteriorLight的ShortTermLighting状态有哪些迁移？",
+      "expected_module": "InteriorLight",
+      "expected_section": "",
+      "question_type": "reasoning",
+      "notes": "State transitions: OFF ↔ ShortTermLighting → LongTermLighting etc."
+    },
+    {
+      "query": "防盗系统ATWS的报警状态如何进入和退出？",
+      "expected_module": "TheftProtection",
+      "expected_section": "",
+      "question_type": "reasoning",
+      "notes": "ATWS Alarm/Disarmed/Prearmed state transitions"
+    },
+    {
+      "query": "车窗防夹故障DTC码B155C的检测条件是什么？",
+      "expected_module": "Window",
+      "expected_section": "",
+      "question_type": "diagnostic",
+      "notes": "Specific DTC fault detection for window anti-pinch"
+    },
+    {
+      "query": "ExteriorLight的电压范围参数有哪些？",
+      "expected_module": "ExteriorLight",
+      "expected_section": "3.5",
+      "question_type": "factual",
+      "notes": "Voltage range parameters for ExteriorLight"
+    },
+    {
+      "query": "VMM如何判断进入Driving模式的条件是否满足？",
+      "expected_module": "VMM",
+      "expected_section": "2.3.4.3.2",
+      "question_type": "reasoning",
+      "notes": "Driving entry conditions: brake, key, gear, etc."
+    },
+    {
+      "query": "门锁CrashUnlock功能的信号依赖关系是什么？",
+      "expected_module": "Lock",
+      "expected_section": "6.4.7",
+      "question_type": "reasoning",
+      "notes": "CrashUnlock signal chain: ACU_CrashOutputSts → Lock module"
+    },
+    {
+      "query": "雨刮电机的PWM占空比控制参数是什么？",
+      "expected_module": "Wiper",
+      "expected_section": "",
+      "question_type": "factual",
+      "notes": "Wiper motor PWM duty cycle parameters"
+    },
+    {
+      "query": "BCM网络休眠时VMM内部状态迁移流程是什么？",
+      "expected_module": "VMM",
+      "expected_section": "2.4.1",
+      "question_type": "reasoning",
+      "notes": "Network sleep state machine flow: Convenience → Inactive → Abandoned"
+    }
+  ]
+}

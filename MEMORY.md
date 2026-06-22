@@ -1,0 +1,2 @@
+- [BCM-RAG Project Status](memory/bcm-rag-project-status.md) — ~80% complete, all 9 retrieval stages + embeddings + LLM + API done
+- [2026-06-18 Upgrades](memory/progress-2026-06-18.md) — BGE-M3 upgrade + Reranker enable + TRANSITION_TO fix (0→34) + Neo4j/Qdrant store abstractions
