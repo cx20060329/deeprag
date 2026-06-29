@@ -1,27 +1,76 @@
-"""DeepRAG API — FastAPI application.
+"""DeepRAG API — FastAPI application with API key authentication.
 
 REST API for the DeepRAG retrieval system.
 Supports domain-configurable document RAG.
 
 Usage:
+    # Set API keys via env var (comma-separated):
+    DEEPRAG_API_KEYS=sk-deeprag-xxxx,sk-deeprag-yyyy
+
     python -m api.main
     uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+Client usage:
+    curl -H "Authorization: Bearer sk-deeprag-xxxx" \\
+         -H "Content-Type: application/json" \\
+         -d '{"query":"What is GlobalClose?"}' \\
+         http://localhost:8000/search
 """
 
 from __future__ import annotations
 
 import os
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
 from retrieval import RetrievalPipeline
 from domain import load_domain_config, list_domains, register_domain_config
+
+# ---------------------------------------------------------------------------
+# API Key Authentication
+# ---------------------------------------------------------------------------
+
+security = HTTPBearer(auto_error=False)
+
+# Load valid API keys from env var (comma-separated)
+# If not set, authentication is disabled (dev mode)
+_VALID_API_KEYS: set[str] = set()
+_raw = os.getenv("DEEPRAG_API_KEYS", "")
+if _raw:
+    _VALID_API_KEYS = {k.strip() for k in _raw.split(",") if k.strip()}
+_AUTH_ENABLED = bool(_VALID_API_KEYS)
+
+
+def require_api_key(credentials: HTTPAuthorizationCredentials | None = Depends(security)):
+    """Validate API key from Authorization: Bearer header.
+
+    If DEEPRAG_API_KEYS is not set, authentication is skipped (dev mode).
+    """
+    if not _AUTH_ENABLED:
+        return None  # Dev mode — no auth required
+
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Missing API key. Use Authorization: Bearer <key>")
+
+    token = credentials.credentials
+    if token not in _VALID_API_KEYS:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+    return token
+
+
+def generate_api_key() -> str:
+    """Generate a new API key."""
+    return "sk-deeprag-" + secrets.token_urlsafe(32)
+
 
 # ---------------------------------------------------------------------------
 # Globals
@@ -72,6 +121,7 @@ class SearchResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     loaded: bool
+    auth_enabled: bool
     stats: dict
 
 
@@ -81,15 +131,22 @@ class LLMConfigRequest(BaseModel):
     model: str = Field(default="", description="Model name")
     provider: str = Field(default="", description="Provider: ark, zhipu, deepseek")
 
+
 class DomainInfoResponse(BaseModel):
     name: str
     display_name: str
     description: str
     entity_types: list[str]
 
+
 class DomainRegisterRequest(BaseModel):
     name: str = Field(..., description="Domain name")
     config: dict = Field(default_factory=dict, description="Domain config dict")
+
+
+class ApiKeyResponse(BaseModel):
+    api_key: str
+    note: str = "Save this key — it won't be shown again"
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +159,11 @@ async def lifespan(app: FastAPI):
     global pipeline, _current_domain_name
     domain = load_domain_config(_current_domain_name)
     print("=" * 50)
-    print(f"Loading DeepRAG Pipeline (domain: {domain.display_name})...")
+    print(f"DeepRAG API Server v0.3.0")
+    print(f"Domain: {domain.display_name}")
+    print(f"Auth: {'enabled' if _AUTH_ENABLED else 'DISABLED (dev mode)'}")
+    if _AUTH_ENABLED:
+        print(f"Valid keys: {len(_VALID_API_KEYS)}")
     print("=" * 50)
     pipeline = (
         RetrievalPipeline(domain=domain)
@@ -122,7 +183,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="DeepRAG API",
-    description="Domain-Adaptable Enterprise RAG Framework",
+    description="Domain-Adaptable Enterprise RAG Framework — API with key authentication",
     version="0.3.0",
     lifespan=lifespan,
 )
@@ -137,11 +198,35 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# Routes — public (no auth required)
+# ---------------------------------------------------------------------------
+
+@app.get("/health", response_model=HealthResponse)
+async def health():
+    """Health check — no auth required."""
+    if not pipeline or not pipeline.is_loaded:
+        return HealthResponse(status="loading", loaded=False, auth_enabled=_AUTH_ENABLED, stats={})
+
+    stats = {
+        "graph_nodes": pipeline.graph.stats["nodes"],
+        "graph_edges": pipeline.graph.stats["edges"],
+        "chunks": pipeline.vector.stats["chunks"],
+        "vocabulary": pipeline.vector.stats["vocabulary"],
+        "dense_available": pipeline.dense is not None and pipeline.dense.is_loaded,
+        "llm_configured": pipeline.llm is not None,
+    }
+    if pipeline.dense and pipeline.dense.is_loaded:
+        stats.update(pipeline.dense.stats)
+
+    return HealthResponse(status="ok", loaded=True, auth_enabled=_AUTH_ENABLED, stats=stats)
+
+
+# ---------------------------------------------------------------------------
+# Routes — API key required
 # ---------------------------------------------------------------------------
 
 @app.get("/domains")
-async def list_available_domains():
+async def list_available_domains(_=Depends(require_api_key)):
     """List all available domain configs."""
     domains = []
     for name in list_domains():
@@ -155,40 +240,34 @@ async def list_available_domains():
             pass
     return {"domains": [d.model_dump() for d in domains]}
 
+
 @app.post("/domains/register")
-async def register_domain(req: DomainRegisterRequest):
+async def register_domain(req: DomainRegisterRequest, _=Depends(require_api_key)):
     """Register a custom domain config."""
     from domain.config import DomainConfig
     config = DomainConfig.from_dict(req.config)
     register_domain_config(config)
     return {"status": "ok", "name": req.name}
 
-@app.get("/health", response_model=HealthResponse)
-async def health():
-    """Health check with pipeline stats."""
-    if not pipeline or not pipeline.is_loaded:
-        return HealthResponse(status="loading", loaded=False, stats={})
 
-    stats = {
-        "graph_nodes": pipeline.graph.stats["nodes"],
-        "graph_edges": pipeline.graph.stats["edges"],
-        "chunks": pipeline.vector.stats["chunks"],
-        "vocabulary": pipeline.vector.stats["vocabulary"],
-        "dense_available": pipeline.dense is not None and pipeline.dense.is_loaded,
-        "llm_configured": pipeline.llm is not None,
-    }
-    if pipeline.dense and pipeline.dense.is_loaded:
-        stats.update(pipeline.dense.stats)
+@app.get("/key/generate", response_model=ApiKeyResponse)
+async def generate_key(_=Depends(require_api_key)):
+    """Generate a new API key (requires existing valid key).
 
-    return HealthResponse(status="ok", loaded=True, stats=stats)
+    The generated key only works for the current server session.
+    To persist, add it to DEEPRAG_API_KEYS env var and restart.
+    """
+    new_key = generate_api_key()
+    _VALID_API_KEYS.add(new_key)
+    return ApiKeyResponse(
+        api_key=new_key,
+        note="Save this key — it won't be shown again. Add to DEEPRAG_API_KEYS for persistence.",
+    )
 
 
 @app.post("/search", response_model=SearchResponse)
-async def search(req: SearchRequest):
-    """Execute full retrieval pipeline.
-
-    Returns merged results, compressed evidence, and optional LLM answer.
-    """
+async def search(req: SearchRequest, _=Depends(require_api_key)):
+    """Execute full retrieval pipeline. Requires API key."""
     global pipeline
     if not pipeline or not pipeline.is_loaded:
         raise HTTPException(status_code=503, detail="Pipeline not loaded yet")
@@ -204,7 +283,6 @@ async def search(req: SearchRequest):
 
     elapsed = (time.time() - t0) * 1000
 
-    # Format merged results
     merged = []
     for r in result.get("merged", [])[:req.top_k]:
         chunk = r.get("chunk", {})
@@ -235,8 +313,8 @@ async def search(req: SearchRequest):
 
 
 @app.post("/search/stream")
-async def search_stream(req: SearchRequest):
-    """Execute retrieval and stream LLM answer tokens (SSE)."""
+async def search_stream(req: SearchRequest, _=Depends(require_api_key)):
+    """Execute retrieval and stream LLM answer tokens (SSE). Requires API key."""
     global pipeline
     if not pipeline or not pipeline.is_loaded:
         raise HTTPException(status_code=503, detail="Pipeline not loaded yet")
@@ -244,15 +322,12 @@ async def search_stream(req: SearchRequest):
     if not pipeline.llm:
         raise HTTPException(status_code=400, detail="LLM not configured. Call /llm/configure first.")
 
-    # Run retrieval (stages 1-8)
     result = pipeline.search(query=req.query, top_k=req.top_k, enable_llm=False)
     evidence = result["evidence"]
 
     async def generate():
         try:
-            for token in pipeline.llm.answer_stream(
-                evidence, req.query, result["intent"],
-            ):
+            for token in pipeline.llm.answer_stream(evidence, req.query, result["intent"]):
                 yield f"data: {token}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
@@ -261,22 +336,13 @@ async def search_stream(req: SearchRequest):
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        },
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
 
 
 @app.post("/llm/configure")
-async def configure_llm(req: LLMConfigRequest):
-    """Configure LLM backend.
-
-    Example:
-        {"provider": "ark"}  # uses env ARK_API_KEY
-        {"provider": "zhipu", "model": "glm-4-flash"}
-        {"api_key": "sk-...", "base_url": "https://...", "model": "..."}
-    """
+async def configure_llm(req: LLMConfigRequest, _=Depends(require_api_key)):
+    """Configure LLM backend. Requires API key."""
     global pipeline
     if not pipeline:
         raise HTTPException(status_code=503, detail="Pipeline not loaded yet")
@@ -288,17 +354,14 @@ async def configure_llm(req: LLMConfigRequest):
             model=req.model or None,
             provider=req.provider,
         )
-        return {
-            "status": "ok",
-            "model": pipeline.llm.model if pipeline.llm else "none",
-        }
+        return {"status": "ok", "model": pipeline.llm.model if pipeline.llm else "none"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/modules")
-async def list_modules():
-    """List all modules in the knowledge graph."""
+async def list_modules(_=Depends(require_api_key)):
+    """List all modules in the knowledge graph. Requires API key."""
     if not pipeline or not pipeline.is_loaded:
         raise HTTPException(status_code=503, detail="Pipeline not loaded yet")
 
@@ -318,14 +381,11 @@ async def list_modules():
 async def search_entities(
     q: str = Query(..., description="Search query"),
     entity_type: str = Query(default="", description="Entity type filter"),
+    _=Depends(require_api_key),
 ):
-    """Search entities in the knowledge graph."""
+    """Search entities in the knowledge graph. Requires API key."""
     if not pipeline or not pipeline.is_loaded:
         raise HTTPException(status_code=503, detail="Pipeline not loaded yet")
 
     results = pipeline.graph.search_entities(q, entity_type=entity_type)
-    return {
-        "query": q,
-        "count": len(results),
-        "entities": results[:50],
-    }
+    return {"query": q, "count": len(results), "entities": results[:50]}
