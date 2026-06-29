@@ -9,18 +9,34 @@ from __future__ import annotations
 import re
 from content_analysis.models import SectionNode, SectionTree
 
-# Chapter number → module name (for BCM document)
-_CHAPTER_TO_MODULE: dict[str, str] = {
-    "1": "_TOC",
-    "2": "VMM",
-    "3": "ExteriorLight",
-    "4": "InteriorLight",
-    "5": "Window",
-    "6": "Lock",
-    "7": "TheftProtection",
-    "8": "Wiper",
-    "9": "RemoteControl",
-}
+# ══════════════════════════════════════════════════════════════════
+# 通用模块名推导：从文档章节标题中提取有意义的短标识符
+# 不再硬编码章节号→模块名映射（那是 PA2A/BCM 专用的，会导致
+# 信息安全SOR 的 §3.2.1 被标为 [ExteriorLight] 等元数据污染）。
+# ══════════════════════════════════════════════════════════════════
+
+def derive_module_name(chapter_title: str, chapter_num: str = "", dataset: str = "", abbrev_map: dict[str, str] | None = None) -> str:
+    """从章节标题推导模块名。返回空字符串表示无法推导，由调用方用 dataset 名回退。
+
+    规则（优先级从高到低）：
+      1. 如果标题为空 → 返回空
+      2. 提取标题中前8个有意义的中文字符作为标识
+      3. 如果标题是"目录"/"TOC" → 返回 "_TOC"
+    """
+    if not chapter_title:
+        return ""
+    title = chapter_title.strip()
+    if title in ("目录", "Table of Contents", "TOC"):
+        return "_TOC"
+    # 提取前8个中文字符作为模块标识（英文文档用前20个字母）
+    import re
+    cn = re.findall(r'[一-鿿]', title)
+    if len(cn) >= 4:
+        return "".join(cn[:8])
+    en = re.findall(r'[A-Za-z0-9]+', title)
+    if en:
+        return "_".join(en[:3])[:20]
+    return ""
 
 # Module name → abbreviation
 _MODULE_ABBREV: dict[str, str] = {
@@ -193,15 +209,15 @@ class SectionTreeBuilder:
         return f"{prefix}_{clean}"
 
     def get_module(self, node: SectionNode, tree: SectionTree) -> str:
-        """Walk up to find chapter node, then map to module name."""
+        """从章节标题推导模块名（通用，不依赖硬编码映射）。"""
         current = node
         for _ in range(10):
-            chapter_num = current.number.split(".")[0] if current.number else ""
-            mod = _CHAPTER_TO_MODULE.get(chapter_num)
-            if mod:
-                return mod
+            if current.title and current.title.strip():
+                mod = derive_module_name(current.title, current.number or "")
+                if mod:
+                    return mod
             if current.parent_id and current.parent_id in tree.nodes:
                 current = tree.nodes[current.parent_id]
             else:
                 break
-        return node.number.split(".")[0] if node.number else ""
+        return ""

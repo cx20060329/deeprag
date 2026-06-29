@@ -1,4 +1,4 @@
-"""BCM-RAG Rule Extraction — Extracts structured rules from MinerU content_list.
+"""DeepRAG Rule Extraction — Extracts structured rules from MinerU content_list.
 
 Handles:
   1. State transition rules (前置条件/触发条件/执行输出 pattern)
@@ -9,6 +9,8 @@ Handles:
   6. Fault detection rules (检测/反应/恢复 pattern)
 
 Output: Structured Rule JSON following the BCM Rule Schema.
+
+Supports DomainConfig for domain-specific section-to-module mapping.
 """
 
 from __future__ import annotations
@@ -19,7 +21,10 @@ import hashlib
 from collections import defaultdict
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from domain.config import DomainConfig
 
 
 # ---------------------------------------------------------------------------
@@ -129,18 +134,20 @@ def _make_rule_id(module: str, rule_type: str, text: str) -> str:
 class StateTransitionExtractor:
     """Extract state transition rules from the structured content_list.
 
-    The BCM document follows this pattern:
-
-        Title: "X.X.X.X 迁移到TargetState状态"
-        Paragraph: "前置条件（&&）："
-        List: [conditions...]
-        Paragraph: "触发条件：" or "触发条件（||）："
-        List: [triggers...]
-        Paragraph: "执行输出："
-        List: [actions...]
-        Paragraph: "注：" (optional)
-        List: [notes...]
+    Supports DomainConfig for section-to-module mapping.
     """
+
+    _BCM_SECTION_MODULE_MAP = {
+        1: "Overview", 2: "VMM", 3: "ExteriorLight", 4: "InteriorLight",
+        5: "Window", 6: "Lock", 7: "Wiper", 8: "Wiper",
+        9: "RemoteControl", 10: "ATWS", 11: "Network",
+    }
+
+    def __init__(self, domain=None):
+        if domain is not None and domain.state_machine is not None:
+            self._section_module_map = domain.state_machine.section_to_module_map or {}
+        else:
+            self._section_module_map = dict(self._BCM_SECTION_MODULE_MAP)
 
     def extract(self, items: list[dict]) -> list[Rule]:
         rules = []
@@ -362,23 +369,9 @@ class StateTransitionExtractor:
 
         return rule
 
-    @staticmethod
-    def _section_to_module(section_num: int) -> str:
-        """Map top-level section number to module name."""
-        MODULE_MAP = {
-            1: "Overview",
-            2: "VMM",
-            3: "ExteriorLight",
-            4: "InteriorLight",
-            5: "Window",
-            6: "Lock",
-            7: "Wiper",
-            8: "Wiper",
-            9: "RemoteControl",
-            10: "ATWS",
-            11: "Network",
-        }
-        return MODULE_MAP.get(section_num, f"Module_{section_num}")
+    def _section_to_module(self, section_num: int) -> str:
+        """Map top-level section number to module name (domain-configurable)."""
+        return self._section_module_map.get(section_num, f"Module_{section_num}")
 
 
 # ---------------------------------------------------------------------------
@@ -418,14 +411,14 @@ class TableRuleExtractor:
                             break
                     else:
                         try:
-                            current_module = StateTransitionExtractor._section_to_module(int(parts[0]))
+                            current_module = self.transition_extractor._section_to_module(int(parts[0]))
                         except (ValueError, IndexError):
                             current_module = "Unknown"
                 # Cache top-level module
                 top_match = re.match(r"(\d+)\s", title_text)
                 if top_match:
                     top_num = int(top_match.group(1))
-                    mapped = StateTransitionExtractor._section_to_module(top_num)
+                    mapped = self.transition_extractor._section_to_module(top_num)
                     section_module_cache[current_section] = mapped
                     current_module = mapped
 
@@ -722,13 +715,13 @@ class TableRuleExtractor:
 class RuleExtractionPipeline:
     """Combined rule extraction: transitions + tables → structured Rule JSON."""
 
-    def __init__(self):
-        self.transition_extractor = StateTransitionExtractor()
+    def __init__(self, domain: "DomainConfig | None" = None):
+        self.transition_extractor = StateTransitionExtractor(domain=domain)
         self.table_extractor = TableRuleExtractor()
 
     def extract_all(
         self,
-        content_list_path: str | Path = "output/bcm_mineru/content_list.json",
+        content_list_path: str | Path | None = None,
     ) -> dict:
         """Extract all rules from MinerU content_list.
 
@@ -743,6 +736,15 @@ class RuleExtractionPipeline:
                 }
             }
         """
+        if content_list_path is None:
+            from config import PARSER_OUTPUT_DIR
+            # auto-detect first available parser output
+            candidates = list(PARSER_OUTPUT_DIR.glob("*/content_list.json"))
+            if not candidates:
+                # fallback to old path for backward compat
+                content_list_path = Path("output/bcm_mineru/content_list.json")
+            else:
+                content_list_path = candidates[0]
         content_list_path = Path(content_list_path)
         with open(content_list_path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -811,9 +813,12 @@ class RuleExtractionPipeline:
     def save(
         self,
         rules_data: dict,
-        output_path: str | Path = "output/content_analysis/rules.json",
+        output_path: str | Path | None = None,
     ) -> Path:
         """Save rules to JSON."""
+        if output_path is None:
+            from config import CONTENT_ANALYSIS_DIR
+            output_path = CONTENT_ANALYSIS_DIR / "rules.json"
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
@@ -828,9 +833,12 @@ class RuleExtractionPipeline:
 
 if __name__ == "__main__":
     import sys
+    from config import CONTENT_ANALYSIS_DIR, PARSER_OUTPUT_DIR
 
-    input_path = sys.argv[1] if len(sys.argv) > 1 else "output/bcm_mineru/content_list.json"
-    output_path = sys.argv[2] if len(sys.argv) > 2 else "output/content_analysis/rules.json"
+    # auto-detect parser output
+    candidates = list(PARSER_OUTPUT_DIR.glob("*/content_list.json"))
+    input_path = sys.argv[1] if len(sys.argv) > 1 else (str(candidates[0]) if candidates else "output/bcm_mineru/content_list.json")
+    output_path = sys.argv[2] if len(sys.argv) > 2 else str(CONTENT_ANALYSIS_DIR / "rules.json")
 
     pipeline = RuleExtractionPipeline()
     rules_data = pipeline.extract_all(input_path)

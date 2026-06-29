@@ -21,8 +21,9 @@ class GraphRetriever:
     """Knowledge graph retriever with pluggable backend.
 
     Usage:
+        from config import CONTENT_ANALYSIS_DIR
         gr = GraphRetriever()
-        gr.load("output/content_analysis/knowledge_graph.json")
+        gr.load(CONTENT_ANALYSIS_DIR / "knowledge_graph.json")
         neighbors = gr.expand("signal_VMM_PEPS_UsageMode", hops=2)
     """
 

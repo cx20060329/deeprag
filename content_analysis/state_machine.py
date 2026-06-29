@@ -1,14 +1,10 @@
-"""BCM-RAG State Machine Builder — Converts rules into state transition graphs.
+"""DeepRAG State Machine Builder — Converts rules into state transition graphs.
 
 Phase 2b: Takes extracted Rule objects and builds a NetworkX state machine graph,
 then exports to Neo4j Cypher.
 
-Capabilities:
-  - Infer source states from rule preconditions
-  - Build directed state graph with transition metadata
-  - Validate completeness: missing transitions, unreachable states, deadlocks
-  - Export to Cypher for Neo4j
-  - Nested state support (composite states)
+Supports DomainConfig for domain-specific state definitions.
+Falls back to BCM defaults if no config is provided.
 """
 
 from __future__ import annotations
@@ -18,9 +14,12 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import networkx as nx
+
+if TYPE_CHECKING:
+    from domain.config import DomainConfig
 
 
 # ---------------------------------------------------------------------------
@@ -95,30 +94,66 @@ class StateMachineBuilder:
     """Build state machines from extracted rules.
 
     Usage:
+        from config import CONTENT_ANALYSIS_DIR
         builder = StateMachineBuilder()
-        builder.load_rules("output/content_analysis/rules.json")
+        builder.load_rules(CONTENT_ANALYSIS_DIR / "rules.json")
         sm = builder.build("VMM")
         print(sm.summary())
     """
 
-    # Section → state name inference patterns
+    # Section → state name inference patterns (generic)
     STATE_PATTERNS = [
-        (r"(\w+)模式", "mode_state"),       # "Abandoned模式" → state=Abandoned
-        (r"迁移到(\w+)状态", "target"),     # "迁移到Inactive状态" → target=Inactive
-        (r"处于(\w+)状态", "source"),       # "处于Abandoned状态" → source=Abandoned
+        (r"(\w+)模式", "mode_state"),
+        (r"迁移到(\w+)状态", "target"),
+        (r"处于(\w+)状态", "source"),
     ]
 
-    # Known VMM states (from the document)
-    VMM_STATES = {
-        "Abandoned": {"is_terminal": True, "power_mode": "OFF"},
-        "Inactive": {"is_initial": True, "power_mode": "OFF"},
-        "Convenience": {"power_mode": "Crank/ON"},
-        "Driving": {"power_mode": "ON"},
+    # BCM default states (used when no DomainConfig provided)
+    _BCM_MODULE_STATES: dict[str, dict[str, dict]] = {
+        "VMM": {
+            "Abandoned": {"is_terminal": True, "power_mode": "OFF"},
+            "Inactive": {"is_initial": True, "power_mode": "OFF"},
+            "Convenience": {"power_mode": "Crank/ON"},
+            "Driving": {"power_mode": "ON"},
+        },
+        "Window": {
+            "Stopped": {"is_initial": True}, "Rising": {}, "Falling": {}, "AntiPinch": {},
+        },
+        "Lock": {
+            "Unlocked": {"is_initial": True}, "Locked": {}, "AutoLocked": {}, "CrashUnlocked": {},
+        },
+        "ExteriorLight": {
+            "Off": {"is_initial": True}, "PositionLight": {}, "LowBeam": {}, "HighBeam": {}, "AutoLight": {},
+        },
+        "InteriorLight": {
+            "Off": {"is_initial": True}, "On": {}, "Dimmed": {},
+        },
+        "Wiper": {
+            "Off": {"is_initial": True}, "Intermittent": {}, "LowSpeed": {}, "HighSpeed": {},
+        },
+        "RemoteControl": {
+            "Disarmed": {"is_initial": True}, "Armed": {}, "Alarm": {},
+        },
+        "TheftProtection": {
+            "Disarmed": {"is_initial": True}, "PreArmed": {}, "Armed": {}, "Alarm": {},
+        },
     }
 
-    def __init__(self):
+    def _get_module_states(self, module: str) -> dict[str, dict]:
+        """获取指定模块的已知状态定义。"""
+        return dict(self._module_states.get(module, {}))
+
+    def __init__(self, domain: "DomainConfig | None" = None):
         self.rules: list[dict] = []
         self._state_machines: dict[str, StateMachine] = {}
+
+        # Use DomainConfig states if provided, else BCM defaults
+        if domain is not None and domain.state_machine is not None:
+            self._module_states = domain.state_machine.module_states
+            self._section_to_module = domain.state_machine.section_to_module_map or {}
+        else:
+            self._module_states = self._BCM_MODULE_STATES
+            self._section_to_module = {}
 
     # ---- Load ----------------------------------------------------------------
 
@@ -167,9 +202,15 @@ class StateMachineBuilder:
         return sm
 
     def build_all(self) -> dict[str, StateMachine]:
-        """Build state machines for all modules that have transition rules."""
+        """Build state machines for all modules that have rules.
+
+        不限于 transition_guard 类型——只要有 activation_rule 或
+        deactivation_rule 的模块都可以推断状态机。
+        """
         modules = set(r.get("module", "") for r in self.rules
-                      if r.get("rule_type") == "transition_guard")
+                      if r.get("module") and r.get("rule_type") in (
+                          "transition_guard", "activation_rule",
+                          "deactivation_rule", "signal_value"))
         for mod in modules:
             if mod and mod != "Unknown":
                 try:
@@ -190,41 +231,42 @@ class StateMachineBuilder:
         """
         states = {}
 
-        # Start with known states
-        if module == "VMM":
-            for name, props in self.VMM_STATES.items():
-                states[name] = dict(props)
+        # 从已知状态定义开始（VMM + 非VMM模块）
+        known = self._get_module_states(module)
+        for name, props in known.items():
+            states[name] = dict(props)
 
-        # Discover states ONLY from transition rules' source/target
+        # 从规则中提取状态
         for rule in self.rules:
             if rule.get("module") != module:
                 continue
 
-            # From preconditions: "处于X状态" → ONLY if X is a known state pattern
+            rt = rule.get("rule_type", "")
+
+            # transition_guard: "处于X状态" → 源状态
             for pre in rule.get("preconditions", []):
                 m = re.search(r"处于(\w+)状态", pre)
                 if m:
                     name = m.group(1)
-                    # Normalize case
                     name = name[0].upper() + name[1:] if name else name
-                    # Only add if it's a known VMM state or a transition target
-                    if module == "VMM" and name in self.VMM_STATES:
-                        if name not in states:
-                            states[name] = dict(self.VMM_STATES[name])
-                    elif rule.get("rule_type") == "transition_guard":
-                        if name not in states:
-                            states[name] = {}
+                    if rt == "transition_guard" and name not in states:
+                        states[name] = {}
 
-            # From actions: "迁移到X状态" → state X
+            # action_target_state → 目标状态
             target = rule.get("action_target_state", "")
             if target:
                 target = target[0].upper() + target[1:] if target else target
-                if target not in states:
-                    # Check if it's a known state
-                    if module == "VMM" and target in self.VMM_STATES:
-                        states[target] = dict(self.VMM_STATES[target])
-                    elif rule.get("rule_type") == "transition_guard":
-                        states[target] = {}
+                if rt == "transition_guard" and target not in states:
+                    states[target] = {}
+
+            # activation_rule / deactivation_rule: 从条件/动作文本推断状态
+            if rt in ("activation_rule", "deactivation_rule"):
+                cond = str(rule.get("condition_expr", rule.get("condition", "")))
+                action = str(rule.get("action", rule.get("action_text", "")))
+                combined = cond + " " + action
+                for known_name in known:
+                    if known_name.lower() in combined.lower() and known_name not in states:
+                        states[known_name] = dict(known[known_name])
 
         return states
 
@@ -451,9 +493,12 @@ class StateMachineBuilder:
     def save(
         self,
         sm: StateMachine,
-        output_dir: str | Path = "output/content_analysis",
+        output_dir: str | Path | None = None,
     ) -> dict[str, Path]:
         """Save state machine as both Cypher and JSON."""
+        if output_dir is None:
+            from config import CONTENT_ANALYSIS_DIR
+            output_dir = CONTENT_ANALYSIS_DIR
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -512,9 +557,10 @@ class StateMachineBuilder:
 
 if __name__ == "__main__":
     import sys
+    from config import CONTENT_ANALYSIS_DIR
 
-    rules_path = sys.argv[1] if len(sys.argv) > 1 else "output/content_analysis/rules.json"
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else "output/content_analysis"
+    rules_path = sys.argv[1] if len(sys.argv) > 1 else str(CONTENT_ANALYSIS_DIR / "rules.json")
+    output_dir = sys.argv[2] if len(sys.argv) > 2 else str(CONTENT_ANALYSIS_DIR)
 
     builder = StateMachineBuilder()
     builder.load_rules(rules_path)

@@ -1,6 +1,7 @@
-"""BCM-RAG API — FastAPI application.
+"""DeepRAG API — FastAPI application.
 
-REST API for the BCM-RAG retrieval system.
+REST API for the DeepRAG retrieval system.
+Supports domain-configurable document RAG.
 
 Usage:
     python -m api.main
@@ -20,14 +21,17 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from retrieval import RetrievalPipeline
+from domain import load_domain_config, list_domains, register_domain_config
 
 # ---------------------------------------------------------------------------
 # Globals
 # ---------------------------------------------------------------------------
 
 pipeline: RetrievalPipeline | None = None
+_current_domain_name: str = "bcm"
 
-OUTPUT_DIR = Path(os.getenv("BCM_OUTPUT_DIR", "output/content_analysis"))
+from config import CONTENT_ANALYSIS_DIR
+OUTPUT_DIR = Path(os.getenv("DEEPRAG_OUTPUT_DIR") or os.getenv("BCM_OUTPUT_DIR", str(CONTENT_ANALYSIS_DIR)))
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +81,16 @@ class LLMConfigRequest(BaseModel):
     model: str = Field(default="", description="Model name")
     provider: str = Field(default="", description="Provider: ark, zhipu, deepseek")
 
+class DomainInfoResponse(BaseModel):
+    name: str
+    display_name: str
+    description: str
+    entity_types: list[str]
+
+class DomainRegisterRequest(BaseModel):
+    name: str = Field(..., description="Domain name")
+    config: dict = Field(default_factory=dict, description="Domain config dict")
+
 
 # ---------------------------------------------------------------------------
 # App lifecycle
@@ -85,12 +99,13 @@ class LLMConfigRequest(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load pipeline on startup, cleanup on shutdown."""
-    global pipeline
+    global pipeline, _current_domain_name
+    domain = load_domain_config(_current_domain_name)
     print("=" * 50)
-    print("Loading BCM-RAG Pipeline...")
+    print(f"Loading DeepRAG Pipeline (domain: {domain.display_name})...")
     print("=" * 50)
     pipeline = (
-        RetrievalPipeline()
+        RetrievalPipeline(domain=domain)
         .load(
             kg_path=OUTPUT_DIR / "knowledge_graph.json",
             chunks_path=OUTPUT_DIR / "chunks.json",
@@ -106,9 +121,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="BCM-RAG API",
-    description="Body Control Module RAG Retrieval System",
-    version="0.2.0",
+    title="DeepRAG API",
+    description="Domain-Adaptable Enterprise RAG Framework",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -124,6 +139,29 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+@app.get("/domains")
+async def list_available_domains():
+    """List all available domain configs."""
+    domains = []
+    for name in list_domains():
+        try:
+            d = load_domain_config(name)
+            domains.append(DomainInfoResponse(
+                name=d.name, display_name=d.display_name,
+                description=d.description, entity_types=d.entity_types,
+            ))
+        except Exception:
+            pass
+    return {"domains": [d.model_dump() for d in domains]}
+
+@app.post("/domains/register")
+async def register_domain(req: DomainRegisterRequest):
+    """Register a custom domain config."""
+    from domain.config import DomainConfig
+    config = DomainConfig.from_dict(req.config)
+    register_domain_config(config)
+    return {"status": "ok", "name": req.name}
 
 @app.get("/health", response_model=HealthResponse)
 async def health():

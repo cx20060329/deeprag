@@ -900,3 +900,436 @@ class TestDagAgent:
         assert BCMAgent is not None
         assert AgenticRAGv2 is not None
         assert AgenticRAG is not None
+
+
+# ======================================================================
+# Completeness Evaluation Tests
+# ======================================================================
+
+
+class TestCompletenessEval:
+    """Tests for _exec_completeness_eval node executor."""
+
+    def test_all_sufficient(self):
+        """All dimensions above threshold → high score, is_sufficient=True."""
+        from agent.dag_agent import _exec_completeness_eval
+
+        upstream = {
+            "intent": {
+                "modules": ["VMM", "Window"],
+                "signals": ["IGN1", "PEPS_UsageMode"],
+                "states": ["Inactive", "Driving"],
+                "faults": ["KeyLost"],
+                "question_type": "reasoning",
+            },
+            "sm": {
+                "transitions": [
+                    {"source": "Inactive", "target": "Driving", "guard": "IGN1=1"}
+                    for _ in range(3)
+                ]
+            },
+            "rules": {
+                "matched_rules": [{"rule_id": "r1"} for _ in range(5)]
+            },
+            "chunks": {
+                "chunks": [{"chunk_id": "c1"} for _ in range(5)]
+            },
+        }
+        params = {
+            "query": "How does state transition work?",
+            "dimensions": [
+                "intent_coverage", "state_transitions",
+                "matched_rules", "document_chunks",
+            ],
+        }
+        result = _exec_completeness_eval(None, None, None, None, params, upstream)
+
+        assert result["overall_score"] >= 0.7
+        assert result["is_sufficient"] is True
+        assert len(result["dimensions"]) == 4
+        for dim in result["dimensions"]:
+            assert dim["status"] == "sufficient", f"{dim['name']} should be sufficient"
+
+    def test_all_missing(self):
+        """Empty upstream → low score, is_sufficient=False."""
+        from agent.dag_agent import _exec_completeness_eval
+
+        params = {
+            "query": "Some query",
+            "dimensions": [
+                "intent_coverage", "state_transitions",
+                "matched_rules", "document_chunks",
+            ],
+        }
+        result = _exec_completeness_eval(None, None, None, None, params, {})
+
+        assert result["overall_score"] == 0.0
+        assert result["is_sufficient"] is False
+        for dim in result["dimensions"]:
+            assert dim["status"] == "missing", f"{dim['name']} should be missing"
+            assert dim["found"] == 0
+
+    def test_partial_data(self):
+        """Some dimensions sufficient, some missing → mixed scores."""
+        from agent.dag_agent import _exec_completeness_eval
+
+        upstream = {
+            "intent": {"signals": ["IGN1"], "question_type": "factual"},
+            "chunks": {"chunks": [{"chunk_id": "c1"}, {"chunk_id": "c2"}]},
+        }
+        params = {
+            "query": "Partial data query",
+            "dimensions": [
+                "intent_coverage", "document_chunks", "state_transitions",
+            ],
+        }
+        result = _exec_completeness_eval(None, None, None, None, params, upstream)
+
+        assert 0.0 < result["overall_score"] < 0.5
+        assert result["is_sufficient"] is False
+        # intent_coverage should be insufficient (1 entity < 2 threshold)
+        intent_dim = [d for d in result["dimensions"] if d["name"] == "intent_coverage"][0]
+        assert intent_dim["status"] == "insufficient"
+        # state_transitions should be missing
+        sm_dim = [d for d in result["dimensions"] if d["name"] == "state_transitions"][0]
+        assert sm_dim["status"] == "missing"
+
+    def test_follow_up_queries_generated(self):
+        """When gaps exist, gap_queries should be generated."""
+        from agent.dag_agent import _exec_completeness_eval
+
+        upstream = {
+            "intent": {"states": ["Driving"], "question_type": "reasoning"},
+        }
+        params = {
+            "query": "How to enter Driving mode?",
+            "dimensions": [
+                "intent_coverage", "state_transitions",
+                "matched_rules", "document_chunks",
+            ],
+        }
+        result = _exec_completeness_eval(None, None, None, None, params, upstream)
+
+        # All dimensions except intent_coverage should be missing
+        # so gap_queries should be non-empty
+        assert len(result["gap_queries"]) > 0
+        # Should have summary mentioning gaps
+        assert "缺口" in result["summary"] or result["overall_score"] < 0.5
+
+    def test_dimension_weights(self):
+        """Weighted average calculation is correct with known inputs."""
+        from agent.dag_agent import _exec_completeness_eval
+
+        # transitions (weight 0.20): 5 found → score 1.0
+        # rules (weight 0.20): 0 found → score 0.0
+        # chunks (weight 0.15): 0 found → score 0.0
+        # intent_coverage (weight 0.05): 5 entities → score 1.0
+        # Expected: (0.20*1.0 + 0.20*0.0 + 0.15*0.0 + 0.05*1.0) / 0.60 = 0.25/0.60 ≈ 0.42
+        upstream = {
+            "intent": {
+                "signals": ["S1", "S2", "S3"],
+                "states": ["St1", "St2"],
+                "question_type": "reasoning",
+            },
+            "sm": {"transitions": [{} for _ in range(5)]},
+        }
+        params = {
+            "query": "Weight test",
+            "dimensions": [
+                "intent_coverage", "state_transitions",
+                "matched_rules", "document_chunks",
+            ],
+        }
+        result = _exec_completeness_eval(None, None, None, None, params, upstream)
+
+        # Verify dimensions
+        for dim in result["dimensions"]:
+            if dim["name"] == "state_transitions":
+                assert dim["score"] == 1.0
+                assert dim["status"] == "sufficient"
+            elif dim["name"] == "matched_rules":
+                assert dim["score"] == 0.0
+                assert dim["status"] == "missing"
+            elif dim["name"] == "document_chunks":
+                assert dim["score"] == 0.0
+            elif dim["name"] == "intent_coverage":
+                assert dim["score"] == 1.0
+
+        # Weighted sum: 0.20*1.0 + 0.20*0.0 + 0.15*0.0 + 0.05*1.0 = 0.25
+        # Total weight: 0.20 + 0.20 + 0.15 + 0.05 = 0.60
+        # Expected: 0.25 / 0.60 ≈ 0.42
+        assert 0.40 <= result["overall_score"] <= 0.44
+
+    def test_output_keys(self):
+        """Output dict has all expected keys for DagSynthesizer compatibility."""
+        from agent.dag_agent import _exec_completeness_eval
+
+        upstream = {
+            "intent": {"signals": ["IGN1"], "question_type": "factual"},
+        }
+        params = {
+            "query": "Test",
+            "dimensions": ["intent_coverage", "document_chunks"],
+        }
+        result = _exec_completeness_eval(None, None, None, None, params, upstream)
+
+        expected_keys = {
+            "overall_score", "dimensions", "is_sufficient",
+            "gap_queries", "summary", "llm_used", "report_type",
+        }
+        assert expected_keys.issubset(set(result.keys()))
+
+        for dim in result["dimensions"]:
+            dim_keys = {"name", "score", "threshold", "status", "detail", "gaps", "found"}
+            assert dim_keys.issubset(set(dim.keys()))
+
+
+class TestDagExecutorWithEval:
+    """Integration tests: DagExecutor with completeness_eval node."""
+
+    def test_execute_with_eval_node(self):
+        """DAG with intent → chunks → eval executes all nodes."""
+        from agent.dag_agent import DagExecutor, DagResult
+
+        executor = DagExecutor()
+        dag_plan = {
+            "template": "factual_lookup",
+            "nodes": {
+                "intent": {"enabled": True, "type": "intent_analysis", "params": {}},
+                "chunks": {"enabled": True, "type": "chunk_search", "params": {"top_k": 3}},
+                "eval": {
+                    "enabled": True,
+                    "type": "completeness_eval",
+                    "params": {"dimensions": ["intent_coverage", "document_chunks"]},
+                },
+            },
+            "edges": [
+                {"from": "intent", "to": "chunks"},
+                {"from": "intent", "to": "eval"},
+                {"from": "chunks", "to": "eval"},
+            ],
+        }
+
+        from tests.test_dag_agent import FakePipeline, FakeReasoningEngine
+        pipeline = FakePipeline()
+        engine = FakeReasoningEngine()
+
+        result = executor.execute(
+            dag_plan=dag_plan,
+            pipeline=pipeline,
+            engine=engine,
+            sm={"module": "VMM", "transitions": []},
+            rules={"rules": []},
+            query="What is IGN1?",
+        )
+
+        assert isinstance(result, DagResult)
+        assert "intent" in result.node_outputs
+        assert "chunks" in result.node_outputs
+        assert "eval" in result.node_outputs
+        assert result.node_outputs["eval"].status == "success"
+
+        eval_output = result.node_outputs["eval"].output
+        assert eval_output is not None
+        assert "overall_score" in eval_output
+        assert "is_sufficient" in eval_output
+        assert "dimensions" in eval_output
+
+    def test_eval_node_runs_last(self):
+        """Eval node should be in the last topological level."""
+        from agent.dag_agent import DagExecutor
+
+        executor = DagExecutor()
+        dag_plan = {
+            "template": "state_transition",
+            "nodes": {
+                "intent": {"enabled": True, "type": "intent_analysis", "params": {}},
+                "sm": {"enabled": True, "type": "state_machine", "params": {"states": []}},
+                "rules": {"enabled": True, "type": "rule_lookup", "params": {"keywords": "", "modules": []}},
+                "chunks": {"enabled": True, "type": "chunk_search", "params": {"top_k": 3}},
+                "eval": {
+                    "enabled": True,
+                    "type": "completeness_eval",
+                    "params": {"dimensions": ["intent_coverage", "state_transitions", "matched_rules", "document_chunks"]},
+                },
+            },
+            "edges": [
+                {"from": "intent", "to": "sm"},
+                {"from": "intent", "to": "rules"},
+                {"from": "intent", "to": "chunks"},
+                {"from": "sm", "to": "rules"},
+                {"from": "intent", "to": "eval"},
+                {"from": "sm", "to": "eval"},
+                {"from": "rules", "to": "eval"},
+                {"from": "chunks", "to": "eval"},
+            ],
+        }
+
+        from tests.test_dag_agent import FakePipeline, FakeReasoningEngine
+        pipeline = FakePipeline()
+        engine = FakeReasoningEngine()
+
+        result = executor.execute(
+            dag_plan=dag_plan,
+            pipeline=pipeline,
+            engine=engine,
+            sm={"module": "VMM", "transitions": [
+                {"source": "Inactive", "target": "Driving", "guard": "IGN1=1"}
+            ]},
+            rules={"rules": [{"rule_id": "r1", "module": "VMM", "condition": "test", "action": "test"}]},
+            query="How to enter Driving?",
+        )
+
+        # eval should be in the last level
+        assert len(result.execution_order) >= 3
+        last_level = result.execution_order[-1]
+        assert "eval" in last_level, f"eval should be in last level, got: {last_level}"
+
+    def test_eval_node_with_empty_upstream(self):
+        """Eval node handles empty upstream gracefully."""
+        from agent.dag_agent import DagExecutor
+
+        executor = DagExecutor()
+        dag_plan = {
+            "template": "factual_lookup",
+            "nodes": {
+                "intent": {"enabled": True, "type": "intent_analysis", "params": {}},
+                "chunks": {"enabled": True, "type": "chunk_search", "params": {"top_k": 3}},
+                "eval": {
+                    "enabled": True,
+                    "type": "completeness_eval",
+                    "params": {"dimensions": ["intent_coverage", "document_chunks"]},
+                },
+            },
+            "edges": [
+                {"from": "intent", "to": "chunks"},
+                {"from": "intent", "to": "eval"},
+                {"from": "chunks", "to": "eval"},
+            ],
+        }
+
+        from tests.test_dag_agent import FakePipeline, FakeReasoningEngine
+        pipeline = FakePipeline()
+        engine = FakeReasoningEngine()
+
+        result = executor.execute(
+            dag_plan=dag_plan,
+            pipeline=pipeline,
+            engine=engine,
+            sm={},
+            rules={},
+            query="Test query",
+        )
+
+        eval_output = result.node_outputs["eval"]
+        assert eval_output.status == "success"
+        assert eval_output.output is not None
+        assert eval_output.output["is_sufficient"] is not None
+
+
+class TestDagSynthesizerWithEval:
+    """Integration tests: DagSynthesizer with completeness eval output."""
+
+    def test_format_eval_node_output(self):
+        """_format_node_output handles completeness_eval type."""
+        from agent.dag_agent import DagSynthesizer
+
+        synthesizer = DagSynthesizer(None)
+        parts = []
+        data = {
+            "overall_score": 0.75,
+            "is_sufficient": True,
+            "dimensions": [
+                {"name": "state_transitions", "score": 0.8, "threshold": 2,
+                 "status": "sufficient", "found": 4, "gaps": [], "detail": "OK"},
+                {"name": "matched_rules", "score": 0.4, "threshold": 2,
+                 "status": "insufficient", "found": 2, "gaps": ["需要更多规则"], "detail": "不足"},
+            ],
+            "gap_queries": ["Find more rules"],
+            "summary": "信息基本充分",
+        }
+        synthesizer._format_node_output(parts, "completeness_eval", data)
+
+        output = "\n".join(parts)
+        assert "75%" in output or "0.75" in output
+        assert "sufficient" in output.lower() or "充分" in output
+        assert "gap_queries" in output.lower() or "跟进查询" in output
+
+    def test_compute_dag_stats_includes_eval(self):
+        """_compute_dag_stats includes completeness metrics."""
+        from agent.dag_agent import DagSynthesizer, DagResult, DagNodeOutput
+
+        synthesizer = DagSynthesizer(None)
+        result = DagResult(
+            question="Test",
+            template="state_transition",
+            dag_plan={},
+            node_outputs={
+                "intent": DagNodeOutput(
+                    node_id="intent", node_type="intent_analysis",
+                    status="success", output={"modules": ["VMM"]},
+                ),
+                "eval": DagNodeOutput(
+                    node_id="eval", node_type="completeness_eval",
+                    status="success", output={
+                        "overall_score": 0.72,
+                        "is_sufficient": True,
+                        "dimensions": [
+                            {"name": "d1", "score": 0.8, "status": "sufficient"},
+                            {"name": "d2", "score": 0.4, "status": "insufficient"},
+                        ],
+                    },
+                ),
+            },
+        )
+
+        stats = synthesizer._compute_dag_stats(result)
+        assert stats["completeness_score"] == 0.72
+        assert stats["completeness_sufficient"] is True
+        assert stats["completeness_gaps"] == 1  # one insufficient dimension
+
+
+class TestDagTemplatesEval:
+    """Verify eval node is present in all templates."""
+
+    def test_all_templates_have_eval_node(self):
+        """All 6 templates include 'eval' in their nodes dict."""
+        from agent.dag_agent import DAG_TEMPLATES
+
+        for name, tmpl in DAG_TEMPLATES.items():
+            assert "eval" in tmpl.nodes, (
+                f"Template '{name}' is missing 'eval' node"
+            )
+
+    def test_eval_node_edges_exist(self):
+        """Each template has at least 2 edges with to='eval'."""
+        from agent.dag_agent import DAG_TEMPLATES
+
+        for name, tmpl in DAG_TEMPLATES.items():
+            eval_edges = [e for e in tmpl.edges if e.get("to") == "eval"]
+            assert len(eval_edges) >= 2, (
+                f"Template '{name}' has only {len(eval_edges)} eval edges"
+            )
+
+    def test_eval_node_type_correct(self):
+        """Each template's eval node has type 'completeness_eval'."""
+        from agent.dag_agent import DAG_TEMPLATES
+
+        for name, tmpl in DAG_TEMPLATES.items():
+            eval_node = tmpl.nodes["eval"]
+            assert eval_node["type"] == "completeness_eval", (
+                f"Template '{name}' eval node type is '{eval_node['type']}'"
+            )
+            assert "dimensions" in eval_node["params"], (
+                f"Template '{name}' eval node missing 'dimensions' in params"
+            )
+
+    def test_eval_node_is_required(self):
+        """All eval nodes should be required=True to ensure they always run."""
+        from agent.dag_agent import DAG_TEMPLATES
+
+        for name, tmpl in DAG_TEMPLATES.items():
+            eval_node = tmpl.nodes["eval"]
+            assert eval_node.get("required") is True, (
+                f"Template '{name}' eval node should be required=True"
+            )

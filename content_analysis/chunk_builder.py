@@ -1,4 +1,4 @@
-"""BCM-RAG Content Analysis — Context-Aware Chunk Builder.
+"""DeepRAG Content Analysis — Context-Aware Chunk Builder.
 
 Rules:
   1. Images → object storage (storage/images/module/img_hash.jpg)
@@ -6,6 +6,8 @@ Rules:
   3. Tables remain standalone chunks with full breadcrumb context
   4. Min chunk: 80 tokens. Smaller chunks get merged with neighbors.
   5. Each chunk tracks referenced images (image_refs) with storage paths.
+
+Supports DomainConfig for domain-specific chunk type patterns.
 """
 
 from __future__ import annotations
@@ -15,20 +17,44 @@ import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
+
 from content_analysis.models import (
     Entity, EntityType, SectionTree, SectionNode,
     TextChunk, ChunkList,
 )
 
-_MIN_TOKENS = 80
-_CHUNK_TYPE_PATTERNS = {
-    "signal_table": re.compile(r"信号名称|CAN ID|信号位置|Signal Name|PIN脚", re.IGNORECASE),
-    "state_transition": re.compile(r"前置条件|触发条件|执行输出|迁移到.*状态", re.IGNORECASE),
-    "state_machine": re.compile(r"状态表|状态图|转移表|模式定义|State Table|State Machine", re.IGNORECASE),
-    "function_desc": re.compile(r"功能描述|激活逻辑|关闭逻辑|使能条件|关闭条件", re.IGNORECASE),
-    "config_block": re.compile(r"配置参数|NVM参数|常数参数|Parameter Name|默认值", re.IGNORECASE),
-    "fault_handling": re.compile(r"故障|报警|诊断|失效|丢失|DTC", re.IGNORECASE),
-    "output_control": re.compile(r"输出控制|Output Control|PWM|占空比|优先级", re.IGNORECASE),
+if TYPE_CHECKING:
+    from domain.config import DomainConfig
+
+_MIN_TOKENS = 40           # 降低合并阈值，保留更多独立小chunk
+_MAX_TOKENS = 1500          # 大chunk上限，超过则拆分
+
+# BCM default patterns (used when no DomainConfig provided)
+_BCM_CHUNK_TYPE_PATTERNS = {
+    "function_requirement": r"基本功能要求|功能定义.*描述|功能列表|功能需求规格",
+    "division_table": r"设计职责.*分工|责任分工表|工作任务.*CH事业部.*供应商|R&A|S&A",
+    "signal_table": r"信号名称|CAN\s*ID|信号位置|Signal Name|PIN脚",
+    "state_transition": r"前置条件|触发条件|执行输出|迁移到.*状态",
+    "state_machine": r"状态表|状态图|转移表|模式定义|State Table|State Machine",
+    "function_desc": r"功能描述|激活逻辑|关闭逻辑|使能条件|关闭条件",
+    "config_block": r"配置参数|NVM参数|常数参数|Parameter Name|默认值",
+    "fault_handling": r"故障诊断|故障检测|故障处理|故障反应|故障恢复|故障码|DTC\s*码|失效模式|故障注入|故障模拟",
+    "output_control": r"输出控制|Output Control|PWM|占空比|优先级",
+}
+
+_BCM_KEY_TERM_PATTERNS = [
+    r'(以太网|Ethernet|SOMEIP|DoIP|CAN\s*FD|CANFD|LIN|FlexRay|AutoSAR|AUTOSAR|OSEK|UDS|OBD)',
+    r'(Bootloader|刷写|烧写|调试工具|编译器|测试盒|休眠唤醒|网络管理|路由功能|诊断路由|诊断功能|信息安全|功能安全)',
+    r'(R&A|S&A|CH事业部|供应商|埃泰克|负责|协助|验收|评审)',
+    r'(ASIL\s*[A-D]|ISO\s*26262|GB\s*\d+|Q/BAIC|企标)',
+    r'(EP1|EP2|PPV|PPAP|SOP|ESO|OTS|DV|PV)',
+]
+
+_BCM_MODULE_ABBREV = {
+    "VMM": "VMM", "ExteriorLight": "ExtLight", "InteriorLight": "IntLight",
+    "Window": "Window", "Lock": "Lock", "TheftProtection": "ATWS",
+    "Wiper": "Wiper", "RemoteControl": "Remote", "_TOC": "TOC",
 }
 
 
@@ -39,12 +65,47 @@ def estimate_tokens(text: str) -> int:
 
 
 class ChunkBuilder:
-    """Build chunks: images → object storage, VLM desc → merged into text chunks."""
+    """Build chunks: images → object storage, VLM desc → merged into text chunks.
 
-    def __init__(self, storage_dir: str = "output/storage"):
+    Supports DomainConfig for domain-specific chunk patterns.
+    Falls back to BCM defaults if no config is provided.
+    """
+
+    def __init__(self, storage_dir: str | None = None, domain: "DomainConfig | None" = None):
+        if storage_dir is None:
+            from config import STORAGE_DIR
+            storage_dir = str(STORAGE_DIR)
         self.storage_dir = Path(storage_dir)
         self.images_storage = self.storage_dir / "images"
         self.images_storage.mkdir(parents=True, exist_ok=True)
+
+        # Compile chunk type patterns from DomainConfig or BCM defaults
+        if domain is not None:
+            self._chunk_type_patterns = {
+                k: re.compile(v, re.IGNORECASE)
+                for k, v in domain.chunking.chunk_type_patterns.items()
+            }
+        else:
+            self._chunk_type_patterns = {
+                k: re.compile(v, re.IGNORECASE)
+                for k, v in _BCM_CHUNK_TYPE_PATTERNS.items()
+            }
+
+        # Key term patterns
+        if domain is not None:
+            self._key_term_patterns = [
+                re.compile(p) for p in domain.chunking.key_term_patterns
+            ]
+        else:
+            self._key_term_patterns = [
+                re.compile(p) for p in _BCM_KEY_TERM_PATTERNS
+            ]
+
+        # Module abbreviation map
+        if domain is not None:
+            self._module_abbrev_map = domain.chunking.module_abbrev_map
+        else:
+            self._module_abbrev_map = _BCM_MODULE_ABBREV
 
     def build(
         self,
@@ -89,7 +150,7 @@ class ChunkBuilder:
             if item_type == "title":
                 title_text = self._extract_title_text(item)
                 level = item.get("content", {}).get("level", 1)
-                if level <= 2:
+                if level <= 3:               # h1/h2/h3 都创建新分组，不再只限 h1/h2
                     if current_group and current_group["indices"]:
                         groups.append(current_group)
                     current_group = {
@@ -183,11 +244,12 @@ class ChunkBuilder:
                 if tbl_chunk:
                     chunks.text_chunks.append(tbl_chunk)
             else:
-                txt_chunk = self._build_text_chunk(
+                txt_chunks = self._build_text_chunks(
                     g, content_list, item_section, tree, section_entities,
                 )
-                if txt_chunk:
-                    chunks.text_chunks.append(txt_chunk)
+                for tc in txt_chunks:
+                    if tc:
+                        chunks.text_chunks.append(tc)
 
         self._assign_chunk_ids(chunks)
         return chunks
@@ -336,11 +398,48 @@ class ChunkBuilder:
         module = self._get_module(node, tree) if node else ""
         section_num = node.number if node else ""
 
-        from hybrid_parser.html_table_parser import HtmlTableParser
-        parser = HtmlTableParser()
-        parsed = parser.parse(html)
-        lines = [" | ".join(parsed.headers)]
-        for row in parsed.rows[:40]:
+        from html.parser import HTMLParser
+
+        class _SimpleTableParser(HTMLParser):
+            """Lightweight HTML table parser — replaces hybrid_parser dependency."""
+            def __init__(self):
+                super().__init__()
+                self.headers: list[str] = []
+                self.rows: list[list[str]] = []
+                self._current_row: list[str] = []
+                self._in_cell = False
+                self._in_header = False
+                self._cell_text = ""
+
+            def handle_starttag(self, tag, attrs):
+                if tag in ("th", "td"):
+                    self._in_cell = True
+                    self._in_header = (tag == "th")
+                    self._cell_text = ""
+
+            def handle_endtag(self, tag):
+                if tag in ("th", "td"):
+                    self._in_cell = False
+                    self._current_row.append(self._cell_text.strip())
+                elif tag == "tr":
+                    if self._current_row:
+                        if self._in_header and not self.headers:
+                            self.headers = self._current_row
+                        else:
+                            self.rows.append(self._current_row)
+                    self._current_row = []
+                    self._in_header = False
+
+            def handle_data(self, data):
+                if self._in_cell:
+                    self._cell_text += data
+
+        parser = _SimpleTableParser()
+        parser.feed(html)
+        lines = []
+        if parser.headers:
+            lines.append(" | ".join(parser.headers))
+        for row in parser.rows[:40]:
             lines.append(" | ".join(row))
         table_text = "\n".join(lines)
 
@@ -350,11 +449,14 @@ class ChunkBuilder:
         after = self._adjacent_text(content_list, idx, 1, 5)
         ents = section_entities.get(section_num, [])
 
+        key_terms = self._extract_key_terms(table_text, chunk_type)
         emb_parts = [
             f"[{module}] [{section_num}] [TABLE] [{chunk_type}]",
             f"路径: {breadcrumb}",
             f"表格: {node.title if node else ''}",
         ]
+        if key_terms:
+            emb_parts.insert(2, f"关键术语: {key_terms}")
         if before:
             emb_parts.append(f"上文: {before[:300]}")
         emb_parts.append(table_text[:2000])
@@ -379,14 +481,14 @@ class ChunkBuilder:
             created_at=datetime.now(timezone.utc).isoformat(),
         )
 
-    # ---- text chunk (with merged images) ---------------------------------
+    # ---- text chunks (with merged images, auto-split large) ----------------
 
-    def _build_text_chunk(
+    def _build_text_chunks(
         self, group: dict, content_list: list[dict],
         item_section: dict, tree: SectionTree, section_entities: dict,
-    ) -> TextChunk | None:
+    ) -> list[TextChunk]:
         if not group["indices"]:
-            return None
+            return []
 
         first_idx = group["indices"][0]
         last_idx = group["indices"][-1]
@@ -410,44 +512,101 @@ class ChunkBuilder:
         text = text.replace("[图片]\n", "").replace("[图片]", "")
 
         if not text.strip():
-            return None
+            return []
 
-        chunk_type = self._classify_chunk_type(text, node.title if node else "")
+        token_count = estimate_tokens(text)
+        if token_count <= _MAX_TOKENS:
+            segments = [text]
+        else:
+            segments = self._split_large_text(text)
+
+        results = []
         breadcrumb = self._breadcrumb(node, tree)
         before = self._adjacent_text(content_list, first_idx, -5, -1)
         after = self._adjacent_text(content_list, last_idx, 1, 5)
         ents = section_entities.get(section_num, [])
 
-        emb_parts = [
-            f"[{module}] [{section_num}] [{chunk_type}]",
-            f"路径: {breadcrumb}",
-        ]
-        if group["title"]:
-            emb_parts.append(f"章节: {group['title']}")
-        if before:
-            emb_parts.append(f"上文: {before[:200]}")
-        emb_parts.append(text[:3000])
-        if after:
-            emb_parts.append(f"下文: {after[:200]}")
+        for seg_i, seg_text in enumerate(segments):
+            if not seg_text.strip():
+                continue
 
-        return TextChunk(
-            chunk_id="",
-            chunk_type=chunk_type,
-            text=text,
-            embedding_text="\n".join(emb_parts),
-            module=module,
-            section_path=section_num,
-            section_title=node.title if node else "",
-            entities=[e.entity_id for e in ents],
-            signals=[e.name for e in ents if e.entity_type == EntityType.SIGNAL],
-            states=[e.name for e in ents if e.entity_type == EntityType.STATE],
-            parameters=[e.name for e in ents if e.entity_type == EntityType.PARAMETER],
-            has_image=len(image_refs) > 0,
-            image_refs=image_refs,
-            source_indices=group["indices"],
-            token_count=estimate_tokens(text),
-            created_at=datetime.now(timezone.utc).isoformat(),
-        )
+            chunk_type = self._classify_chunk_type(seg_text, node.title if node else "")
+
+            # ── 关键术语提取：把chunk中的技术术语注入embedding文本首行 ──
+            # 解决"以太网"在大表中被语义平均化的问题
+            key_terms = self._extract_key_terms(seg_text, chunk_type)
+
+            emb_parts = [
+                f"[{module}] [{section_num}] [{chunk_type}]",
+                f"路径: {breadcrumb}",
+            ]
+            if key_terms:
+                emb_parts.insert(1, f"关键术语: {key_terms}")  # 紧跟在类型后面，最大化embedding权重
+            if group["title"]:
+                emb_parts.append(f"章节: {group['title']}")
+            if len(segments) > 1:
+                emb_parts.append(f"分段: {seg_i+1}/{len(segments)}")
+            if seg_i == 0 and before:
+                emb_parts.append(f"上文: {before[:200]}")
+            emb_parts.append(seg_text[:3000])
+            if seg_i == len(segments) - 1 and after:
+                emb_parts.append(f"下文: {after[:200]}")
+
+            seg_title = (group.get("title") or node.title if node else "") or ""
+            if len(segments) > 1:
+                seg_title = f"{seg_title} (part {seg_i+1})"
+
+            results.append(TextChunk(
+                chunk_id="",
+                chunk_type=chunk_type,
+                text=seg_text,
+                embedding_text="\n".join(emb_parts),
+                module=module,
+                section_path=section_num,
+                section_title=seg_title,
+                entities=[e.entity_id for e in ents],
+                signals=[e.name for e in ents if e.entity_type == EntityType.SIGNAL],
+                states=[e.name for e in ents if e.entity_type == EntityType.STATE],
+                parameters=[e.name for e in ents if e.entity_type == EntityType.PARAMETER],
+                has_image=len(image_refs) > 0 and seg_i == 0,
+                image_refs=image_refs if seg_i == 0 else [],
+                source_indices=group["indices"],
+                token_count=estimate_tokens(seg_text),
+                created_at=datetime.now(timezone.utc).isoformat(),
+            ))
+
+        return results
+
+    @staticmethod
+    def _split_large_text(text: str) -> list[str]:
+        """按段落边界拆分大文本，优先在 ## 标题处断开。"""
+        parts = re.split(r"(\n(?=##\s))", text)
+        current = ""
+        segments = []
+        for part in parts:
+            candidate = current + part
+            if estimate_tokens(candidate) > _MAX_TOKENS and current.strip():
+                segments.append(current.strip())
+                current = part
+            else:
+                current = candidate
+        if current.strip():
+            if estimate_tokens(current) > _MAX_TOKENS * 1.5:
+                sub_parts = current.split("\n\n")
+                sub_current = ""
+                for sp in sub_parts:
+                    sc = sub_current + ("\n\n" if sub_current else "") + sp
+                    if estimate_tokens(sc) > _MAX_TOKENS and sub_current.strip():
+                        segments.append(sub_current.strip())
+                        sub_current = sp
+                    else:
+                        sub_current = sc
+                if sub_current.strip():
+                    segments.append(sub_current.strip())
+            else:
+                segments.append(current.strip())
+        return segments if segments else [text.strip()]
+
 
     # ---- context helpers --------------------------------------------------
 
@@ -466,6 +625,22 @@ class ChunkBuilder:
                     if t.strip():
                         texts.append(f"[{t.strip()[:100]}]")
         return " ".join(texts)
+
+    def _extract_key_terms(self, text: str, chunk_type: str = "") -> str:
+        """从chunk文本中提取高价值技术术语，用于增强embedding关键词权重。
+
+        解决"以太网"在572-token大表中被语义平均化的问题：
+        将提取到的术语放在embedding_text第二行（紧接类型），embedding模型
+        对文本前部的词给予更高权重，确保这些术语不会被后续大量文本稀释。
+        """
+        found = set()
+        for pattern in self._key_term_patterns:
+            for m in pattern.finditer(text):
+                term = m.group(0).strip()
+                if len(term) >= 2:
+                    found.add(term)
+        # 限制数量：太多术语反而会分散权重
+        return " | ".join(sorted(found)[:20]) if found else ""
 
     @staticmethod
     def _breadcrumb(node: SectionNode | None, tree: SectionTree) -> str:
@@ -491,12 +666,8 @@ class ChunkBuilder:
             counters[c.module] += 1
             c.chunk_id = f"chunk_{self._abbrev(c.module)}_{counters[c.module]:03d}"
 
-    @staticmethod
-    def _abbrev(module: str) -> str:
-        m = {"VMM": "VMM", "ExteriorLight": "ExtLight", "InteriorLight": "IntLight",
-             "Window": "Window", "Lock": "Lock", "TheftProtection": "ATWS",
-             "Wiper": "Wiper", "RemoteControl": "Remote", "_TOC": "TOC"}
-        return m.get(module, module[:6])
+    def _abbrev(self, module: str) -> str:
+        return self._module_abbrev_map.get(module, module[:6])
 
     @staticmethod
     def _get_item_text(item: dict) -> str:
@@ -523,20 +694,29 @@ class ChunkBuilder:
     @staticmethod
     def _classify_chunk_type(text: str, title: str) -> str:
         combined = title + " " + text[:500]
-        for ctype, pattern in _CHUNK_TYPE_PATTERNS.items():
+        for ctype, pattern in self._chunk_type_patterns.items():
             if pattern.search(combined):
                 return ctype
         return "general_text"
 
-    @staticmethod
-    def _get_module(node: SectionNode, tree: SectionTree) -> str:
-        from content_analysis.section_tree import _CHAPTER_TO_MODULE
+    # ── 通用模块名推导 ──
+    # 从文档章节标题自动推导模块标识，替代硬编码的章节号→模块名映射。
+    # 兼容所有文档类型：BCM、信息安全SOR、座椅控制器SOR、RFQ 等。
+
+    def _get_module(self, node, tree) -> str:
+        """从章节标题推导模块名。
+
+        向上遍历父节点，取第一个有意义的顶级章节标题作为模块标识。
+        如果所有祖先都没有标题，返回空字符串。
+        """
+        from content_analysis.section_tree import derive_module_name
+
         current = node
         for _ in range(10):
-            chapter_num = current.number.split(".")[0] if current.number else ""
-            mod = _CHAPTER_TO_MODULE.get(chapter_num)
-            if mod:
-                return mod
+            if current.title and current.title.strip():
+                mod = derive_module_name(current.title, current.number or "")
+                if mod:
+                    return mod
             if current.parent_id and current.parent_id in tree.nodes:
                 current = tree.nodes[current.parent_id]
             else:

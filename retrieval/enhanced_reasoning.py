@@ -24,10 +24,11 @@ class EnhancedReasoningEngine:
     """Adds KG/Rules/SM reasoning on top of retrieval pipeline results.
 
     Usage:
+        from config import CONTENT_ANALYSIS_DIR
         engine = EnhancedReasoningEngine(pipeline)
-        engine.load_sm("output/content_analysis/state_machine_VMM.json")
-        engine.load_rules("output/content_analysis/rules.json")
-        engine.load_kg("output/content_analysis/knowledge_graph.json")
+        engine.load_sm(CONTENT_ANALYSIS_DIR / "state_machine_VMM.json")
+        engine.load_rules(CONTENT_ANALYSIS_DIR / "rules.json")
+        engine.load_kg(CONTENT_ANALYSIS_DIR / "knowledge_graph.json")
 
         result = pipeline.search("从Abandoned如何进入Driving")
         enhanced = engine.enhance(result)
@@ -608,8 +609,8 @@ class EnhancedReasoningEngine:
 # ---------------------------------------------------------------------------
 
 def create_enhanced_pipeline(
-    kg_path: str = "output/content_analysis/knowledge_graph.json",
-    rules_path: str = "output/content_analysis/rules.json",
+    kg_path: str | None = None,
+    rules_path: str | None = None,
     sm_paths: list[str] | None = None,
 ) -> "EnhancedPipeline":
     """Create a pipeline with enhanced reasoning built-in.
@@ -620,10 +621,16 @@ def create_enhanced_pipeline(
         print(result["reasoning"])
     """
     from retrieval import RetrievalPipeline
+    from config import CONTENT_ANALYSIS_DIR
+
+    if kg_path is None:
+        kg_path = str(CONTENT_ANALYSIS_DIR / "knowledge_graph.json")
+    if rules_path is None:
+        rules_path = str(CONTENT_ANALYSIS_DIR / "rules.json")
 
     if sm_paths is None:
-        sm_dir = Path("output/content_analysis")
-        sm_paths = list(sm_dir.glob("state_machine_*.json"))
+        sm_dir = CONTENT_ANALYSIS_DIR
+        sm_paths = [str(p) for p in sm_dir.glob("state_machine_*.json")]
 
     pipeline = RetrievalPipeline()
     pipeline.load(use_dense=True)

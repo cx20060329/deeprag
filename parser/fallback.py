@@ -25,7 +25,7 @@ def _check_docling() -> bool:
 def _check_mineru() -> bool:
     """Check if MinerU (magic-pdf) is installed and importable."""
     try:
-        from mineru.backend.office.docx_analyze import office_docx_analyze  # noqa: F401
+        from magic_pdf.tools.common import do_parse  # noqa: F401
         return True
     except ImportError:
         return False
@@ -46,7 +46,8 @@ def create_parser(name: str = "auto") -> AbstractParser:
 
     Args:
         name: Parser name — "auto", "docling", "mineru", or "fallback".
-              "auto" tries Docling first, then MinerU.
+              "auto" creates a DoclingParser with MinerU fallback (see
+              create_parser_for_file for PDF-optimized selection).
 
     Returns:
         AbstractParser instance.
@@ -63,10 +64,9 @@ def create_parser(name: str = "auto") -> AbstractParser:
                 "No parser backend available. Install docling or magic-pdf (mineru)."
             )
 
-        # Prefer Docling as primary
+        # Default: Docling primary, MinerU fallback
         if "docling" in available:
             from parser.docling_parser import DoclingParser
-            # If both are available, use Docling with MinerU fallback
             if "mineru" in available:
                 from parser.mineru_parser import MinerUParser
                 return DoclingParser(fallback=MinerUParser())
@@ -109,6 +109,44 @@ def create_parser(name: str = "auto") -> AbstractParser:
         raise ValueError(
             f"Unknown parser: '{name}'. Choices: auto, docling, mineru, fallback"
         )
+
+
+def create_parser_for_file(input_path: str | Path) -> AbstractParser:
+    """Pick the best parser for a given file.
+
+    PDF files  → MinerU primary, Docling fallback
+    All others → Docling primary, MinerU fallback (when available)
+
+    This is the recommended factory for production use.
+    """
+    path = Path(input_path)
+    suffix = path.suffix.lower()
+
+    available = _list_available()
+
+    if not available:
+        raise RuntimeError(
+            "No parser backend available. Install docling or magic-pdf (mineru)."
+        )
+
+    if suffix == ".pdf" and "mineru" in available:
+        from parser.mineru_parser import MinerUParser
+        if "docling" in available:
+            from parser.docling_parser import DoclingParser
+            return MinerUParser()
+        return MinerUParser()
+
+    # Default: Docling primary, MinerU fallback
+    if "docling" in available:
+        from parser.docling_parser import DoclingParser
+        if "mineru" in available:
+            from parser.mineru_parser import MinerUParser
+            return DoclingParser(fallback=MinerUParser())
+        return DoclingParser()
+
+    if "mineru" in available:
+        from parser.mineru_parser import MinerUParser
+        return MinerUParser()
 
 
 def parse_document(

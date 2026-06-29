@@ -61,7 +61,8 @@ class DoclingParser(AbstractParser):
             raise ValueError(f"Docling does not support format: {suffix}")
 
         if output_dir is None:
-            output_dir = os.path.join("output", src.stem)
+            from config import PARSER_OUTPUT_DIR
+            output_dir = str(PARSER_OUTPUT_DIR / src.stem)
         out = Path(output_dir).resolve()
         out.mkdir(parents=True, exist_ok=True)
 

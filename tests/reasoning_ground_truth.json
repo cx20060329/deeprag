@@ -1,0 +1,217 @@
+{
+  "meta": {
+    "name": "BCM-RAG Reasoning Ground Truth",
+    "version": "1.0",
+    "description": "Ground truth for evaluating reasoning correctness, not just answer correctness. Each entry specifies expected paths, entities, guards, and templates.",
+    "categories": {
+      "path": "路径查找 — 状态间迁移路径是否正确",
+      "impact": "影响分析 — 影响链是否完整",
+      "reachability": "可达性 — 检测到的问题是否正确",
+      "state_transition": "状态转移 — guard条件是否完整",
+      "diagnostic": "故障诊断 — 根因分析是否正确"
+    }
+  },
+
+  "entries": [
+    {
+      "id": "PATH-01",
+      "category": "path",
+      "question": "从Abandoned如何进入Driving？",
+      "expected_template": "path_finding",
+      "expected_path": ["Abandoned", "Inactive", "Convenience", "Driving"],
+      "expected_hops": 3,
+      "key_conditions": ["DoorOpen", "KeyValid", "BrakePressed", "GearInDrive"],
+      "forbidden_paths": [["Abandoned", "Driving"]],
+      "difficulty": "easy"
+    },
+    {
+      "id": "PATH-02",
+      "category": "path",
+      "question": "从Driving如何回到Inactive？",
+      "expected_template": "path_finding",
+      "expected_path": ["Driving", "Inactive"],
+      "expected_hops": 1,
+      "key_conditions": ["IGN_OFF", "VehicleSpeed=0"],
+      "forbidden_paths": [],
+      "difficulty": "easy"
+    },
+    {
+      "id": "PATH-03",
+      "category": "path",
+      "question": "Abandoned到Convenience经过哪些状态？",
+      "expected_template": "path_finding",
+      "expected_path": ["Abandoned", "Inactive", "Convenience"],
+      "expected_hops": 2,
+      "key_conditions": ["DoorOpen", "KeyValid", "网络唤醒"],
+      "forbidden_paths": [],
+      "difficulty": "medium"
+    },
+    {
+      "id": "PATH-04",
+      "category": "path",
+      "question": "Driving能直接回到Abandoned吗？",
+      "expected_template": "path_finding",
+      "expected_path": ["Driving", "Inactive", "Abandoned"],
+      "expected_hops": 2,
+      "key_conditions": ["IGN_OFF", "网络休眠"],
+      "forbidden_paths": [["Driving", "Abandoned"]],
+      "difficulty": "medium"
+    },
+    {
+      "id": "PATH-05",
+      "category": "path",
+      "question": "Inactive到Driving的最短路径是什么？",
+      "expected_template": "path_finding",
+      "expected_path": ["Inactive", "Convenience", "Driving"],
+      "expected_hops": 2,
+      "key_conditions": ["DoorOpen", "KeyValid", "BrakePressed", "GearInDrive"],
+      "forbidden_paths": [["Inactive", "Driving"]],
+      "difficulty": "easy"
+    },
+
+    {
+      "id": "IMPACT-01",
+      "category": "impact",
+      "question": "KeyLost会影响哪些功能？",
+      "expected_template": "impact_analysis",
+      "expected_entities": ["PEPS_UsageMode", "AutoLock"],
+      "expected_depth_min": 1,
+      "forbidden_entities": [],
+      "difficulty": "medium"
+    },
+    {
+      "id": "IMPACT-02",
+      "category": "impact",
+      "question": "IGN1信号故障会导致什么后果？",
+      "expected_template": "impact_analysis",
+      "expected_entities": ["PEPS_UsageMode", "IGN1Relay"],
+      "expected_depth_min": 1,
+      "forbidden_entities": [],
+      "difficulty": "medium"
+    },
+    {
+      "id": "IMPACT-03",
+      "category": "impact",
+      "question": "车窗防夹功能失效会影响什么？",
+      "expected_template": "impact_analysis",
+      "expected_entities": ["Window"],
+      "expected_depth_min": 1,
+      "forbidden_entities": [],
+      "difficulty": "hard"
+    },
+    {
+      "id": "IMPACT-04",
+      "category": "impact",
+      "question": "PEPS_UsageMode变为Invalid会有什么连锁反应？",
+      "expected_template": "impact_analysis",
+      "expected_entities": ["Driving", "Convenience"],
+      "expected_depth_min": 1,
+      "forbidden_entities": [],
+      "difficulty": "hard"
+    },
+
+    {
+      "id": "REACH-01",
+      "category": "reachability",
+      "question": "VMM状态机是否存在不可达状态？",
+      "expected_template": "reachability_check",
+      "expected_issues": ["unreachable"],
+      "forbidden_issues": [],
+      "difficulty": "easy"
+    },
+    {
+      "id": "REACH-02",
+      "category": "reachability",
+      "question": "VMM状态机是否有死锁风险？",
+      "expected_template": "reachability_check",
+      "expected_issues": ["deadlock"],
+      "forbidden_issues": [],
+      "difficulty": "easy"
+    },
+    {
+      "id": "REACH-03",
+      "category": "reachability",
+      "question": "VMM所有状态是否互相连通？",
+      "expected_template": "reachability_check",
+      "expected_issues": [],
+      "forbidden_issues": [],
+      "difficulty": "medium"
+    },
+
+    {
+      "id": "STATE-01",
+      "category": "state_transition",
+      "question": "进入Driving需要什么条件？",
+      "expected_template": "state_transition",
+      "expected_guards": ["BrakePressed", "KeyValid", "GearInDrive", "BMSH_StsCC2"],
+      "expected_source_states": ["Convenience"],
+      "expected_sections": ["2.3.4.3.2"],
+      "difficulty": "easy"
+    },
+    {
+      "id": "STATE-02",
+      "category": "state_transition",
+      "question": "Inactive有哪些退出条件？",
+      "expected_template": "state_transition",
+      "expected_guards": ["DoorOpen", "KeyValid", "网络休眠"],
+      "expected_source_states": ["Inactive"],
+      "expected_sections": [],
+      "difficulty": "easy"
+    },
+    {
+      "id": "STATE-03",
+      "category": "state_transition",
+      "question": "Convenience模式如何退出？",
+      "expected_template": "state_transition",
+      "expected_guards": ["超时", "RKE闭锁", "刹车", "BrakePressed", "KeyValid"],
+      "expected_source_states": ["Convenience"],
+      "expected_sections": ["2.3.4.3"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "STATE-04",
+      "category": "state_transition",
+      "question": "Abandoned模式的进入和退出条件是什么？",
+      "expected_template": "state_transition",
+      "expected_guards": ["网络休眠", "网络唤醒"],
+      "expected_source_states": ["Inactive"],
+      "expected_sections": ["2.3.4.1"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "STATE-05",
+      "category": "state_transition",
+      "question": "Driving退出到Inactive需要哪些条件？",
+      "expected_template": "state_transition",
+      "expected_guards": ["IGN_OFF", "VehicleSpeed=0", "P/N档", "AVP激活"],
+      "expected_source_states": ["Driving"],
+      "expected_sections": [],
+      "difficulty": "medium"
+    },
+
+    {
+      "id": "DIAG-01",
+      "category": "diagnostic",
+      "question": "为什么车辆无法从Inactive进入Driving？",
+      "expected_template": "diagnostic",
+      "expected_root_causes": ["KeyValid=FALSE", "BrakePedal=NOT_PRESSED", "GearNotInDrive", "BMSH_StsCC2=Connect"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "DIAG-02",
+      "category": "diagnostic",
+      "question": "为什么BCM无法进入休眠？",
+      "expected_template": "diagnostic",
+      "expected_root_causes": ["网络唤醒信号持续", "IGN未关闭"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "DIAG-03",
+      "category": "diagnostic",
+      "question": "IGN1继电器不吸合可能是什么原因？",
+      "expected_template": "diagnostic",
+      "expected_root_causes": ["IGN1驱动输出故障", "IGN1继电器开路", "PEPS_IGN1RelaySts异常"],
+      "difficulty": "hard"
+    }
+  ]
+}

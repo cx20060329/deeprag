@@ -41,12 +41,15 @@ class ContentAnalysisPipeline:
 
     def __init__(
         self,
-        output_dir: str = "output/content_analysis",
+        output_dir: str | None = None,
         vlm_api_key: str | None = None,
         vlm_model: str | None = None,
         enable_vlm: bool = True,
         vlm_backend: str = "auto",
     ):
+        if output_dir is None:
+            from config import CONTENT_ANALYSIS_DIR
+            output_dir = str(CONTENT_ANALYSIS_DIR)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.tree_builder = SectionTreeBuilder()
@@ -478,13 +481,13 @@ class ContentAnalysisPipeline:
 
     @staticmethod
     def _get_module(node, tree) -> str:
-        from content_analysis.section_tree import _CHAPTER_TO_MODULE
+        from content_analysis.section_tree import derive_module_name
         current = node
         for _ in range(10):
-            chapter_num = current.number.split(".")[0] if current.number else ""
-            mod = _CHAPTER_TO_MODULE.get(chapter_num)
-            if mod:
-                return mod
+            if current.title and current.title.strip():
+                mod = derive_module_name(current.title, current.number or "")
+                if mod:
+                    return mod
             if current.parent_id and current.parent_id in tree.nodes:
                 current = tree.nodes[current.parent_id]
             else:

@@ -194,20 +194,25 @@ class EmbeddingGenerator:
 
 
 def build_embeddings(
-    chunks_path: str | Path = "output/content_analysis/chunks.json",
-    output_path: str | Path = "output/content_analysis/vector_points.json",
+    chunks_path: str | Path | None = None,
+    output_path: str | Path | None = None,
     model_name: str | None = None,
 ) -> Path:
     """Build embeddings for all chunks and save to vector_points.json.
 
     Args:
-        chunks_path: Path to chunks.json
-        output_path: Output path for vector_points.json
+        chunks_path: Path to chunks.json (defaults to CONTENT_ANALYSIS_DIR/chunks.json)
+        output_path: Output path for vector_points.json (defaults to CONTENT_ANALYSIS_DIR/vector_points.json)
         model_name: Override model (default: auto-select)
 
     Returns:
         Path to the saved vector_points.json
     """
+    from config import CONTENT_ANALYSIS_DIR
+    if chunks_path is None:
+        chunks_path = CONTENT_ANALYSIS_DIR / "chunks.json"
+    if output_path is None:
+        output_path = CONTENT_ANALYSIS_DIR / "vector_points.json"
     chunks_path = Path(chunks_path)
     output_path = Path(output_path)
 
@@ -278,8 +283,9 @@ def build_embeddings(
 
 if __name__ == "__main__":
     import sys
+    from config import CONTENT_ANALYSIS_DIR
     output = build_embeddings(
-        chunks_path=sys.argv[1] if len(sys.argv) > 1 else "output/content_analysis/chunks.json",
-        output_path=sys.argv[2] if len(sys.argv) > 2 else "output/content_analysis/vector_points.json",
+        chunks_path=sys.argv[1] if len(sys.argv) > 1 else CONTENT_ANALYSIS_DIR / "chunks.json",
+        output_path=sys.argv[2] if len(sys.argv) > 2 else CONTENT_ANALYSIS_DIR / "vector_points.json",
     )
     print(f"Done: {output}")

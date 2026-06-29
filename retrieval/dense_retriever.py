@@ -22,8 +22,9 @@ class DenseRetriever:
     """Dense vector similarity search over embedded chunks.
 
     Usage:
+        from config import CONTENT_ANALYSIS_DIR
         dr = DenseRetriever()
-        dr.load("output/content_analysis/vector_points.json")
+        dr.load(CONTENT_ANALYSIS_DIR / "vector_points.json")
         results = dr.search("车窗防夹功能", top_k=10)
     """
 
@@ -40,7 +41,7 @@ class DenseRetriever:
 
     def load(
         self,
-        points_path: str | Path = "output/content_analysis/vector_points.json",
+        points_path: str | Path | None = None,
         embedder: EmbeddingGenerator | None = None,
         auto_embed: bool = True,
     ) -> "DenseRetriever":
@@ -52,6 +53,9 @@ class DenseRetriever:
 
         If vectors are null, auto-generate embeddings if auto_embed is True.
         """
+        if points_path is None:
+            from config import CONTENT_ANALYSIS_DIR
+            points_path = CONTENT_ANALYSIS_DIR / "vector_points.json"
         with open(points_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 

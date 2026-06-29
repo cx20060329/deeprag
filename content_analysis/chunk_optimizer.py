@@ -63,8 +63,8 @@ def _count_real_content(text: str) -> int:
 
 
 def optimize_chunks(
-    chunks_path: str | Path = "output/content_analysis/chunks.json",
-    output_path: str | Path = "output/content_analysis/chunks_optimized.json",
+    chunks_path: str | Path | None = None,
+    output_path: str | Path | None = None,
     min_content_chars: int = 80,
     min_tokens: int = 150,
 ) -> dict:
@@ -72,6 +72,11 @@ def optimize_chunks(
 
     Returns: {chunks: [...], stats: {...}}
     """
+    from config import CONTENT_ANALYSIS_DIR
+    if chunks_path is None:
+        chunks_path = CONTENT_ANALYSIS_DIR / "chunks.json"
+    if output_path is None:
+        output_path = CONTENT_ANALYSIS_DIR / "chunks_optimized.json"
     with open(chunks_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 

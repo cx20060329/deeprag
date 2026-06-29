@@ -111,9 +111,10 @@ class ReasoningEngine:
     """Graph-based reasoning on state machines and rules.
 
     Usage:
+        from config import CONTENT_ANALYSIS_DIR
         engine = ReasoningEngine()
-        engine.load_state_machine("output/content_analysis/state_machine_VMM.json")
-        engine.load_rules("output/content_analysis/rules.json")
+        engine.load_state_machine(CONTENT_ANALYSIS_DIR / "state_machine_VMM.json")
+        engine.load_rules(CONTENT_ANALYSIS_DIR / "rules.json")
 
         # Forward chain
         report = engine.forward_chain("PEPS_KeyStatus", entity_type="signal", max_depth=5)
@@ -801,10 +802,11 @@ class ReasoningEngine:
 
 if __name__ == "__main__":
     import sys
+    from config import CONTENT_ANALYSIS_DIR
 
     engine = ReasoningEngine()
-    engine.load_state_machine("output/content_analysis/state_machine_VMM.json")
-    engine.load_rules("output/content_analysis/rules.json")
+    engine.load_state_machine(CONTENT_ANALYSIS_DIR / "state_machine_VMM.json")
+    engine.load_rules(CONTENT_ANALYSIS_DIR / "rules.json")
 
     module = "VMM"
 

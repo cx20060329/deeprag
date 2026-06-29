@@ -13,8 +13,9 @@ Architecture:
   → Queries can match visual content via text descriptions
 
 Usage:
+  from config import CONTENT_ANALYSIS_DIR
   enhancer = VLMEnhancer(api_key="...")
-  enhancer.enhance_chunks("output/content_analysis/chunks.json")
+  enhancer.enhance_chunks(CONTENT_ANALYSIS_DIR / "chunks.json")
   # Or analyze a single image:
   result = enhancer.analyze_image("path/to/image.png", context="State machine flowchart")
 """
@@ -172,8 +173,8 @@ class VLMEnhancer:
 
     def enhance_chunks(
         self,
-        chunks_path: str | Path = "output/content_analysis/chunks.json",
-        mineru_images_dir: str = "output/bcm_mineru/images",
+        chunks_path: str | Path | None = None,
+        mineru_images_dir: str = "",
         limit: int = 0,
     ) -> list[dict]:
         """Enhance all chunks that contain images with VLM descriptions.
@@ -183,6 +184,14 @@ class VLMEnhancer:
         Returns:
             List of {chunk_id, image_path, vlm_result} for each analyzed image
         """
+        if chunks_path is None:
+            from config import CONTENT_ANALYSIS_DIR
+            chunks_path = CONTENT_ANALYSIS_DIR / "chunks.json"
+        if not mineru_images_dir:
+            from config import PARSER_OUTPUT_DIR
+            # auto-detect first available images directory
+            candidates = list(PARSER_OUTPUT_DIR.glob("*/images"))
+            mineru_images_dir = str(candidates[0]) if candidates else "output/bcm_mineru/images"
         chunks_data = json.loads(Path(chunks_path).read_text(encoding="utf-8"))
         chunks = chunks_data.get("text_chunks", [])
         results = []
@@ -325,7 +334,9 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 1 and sys.argv[1] == "--test":
         # Test with a single image
-        mineru_dir = "output/bcm_mineru/images"
+        from config import PARSER_OUTPUT_DIR
+        candidates = list(PARSER_OUTPUT_DIR.glob("*/images"))
+        mineru_dir = str(candidates[0]) if candidates else "output/bcm_mineru/images"
         imgs = list(Path(mineru_dir).glob("*.png")) + list(Path(mineru_dir).glob("*.jpg"))
         if imgs:
             test_img = str(imgs[0])

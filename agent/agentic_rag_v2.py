@@ -182,8 +182,9 @@ class AgenticRAGv2:
         self._pipeline.load(use_dense=True)
         from retrieval.reasoning_engine import ReasoningEngine
         self._engine = ReasoningEngine()
-        sm_path = Path("output/content_analysis/state_machine_VMM.json")
-        rules_path = Path("output/content_analysis/rules.json")
+        from config import CONTENT_ANALYSIS_DIR
+        sm_path = CONTENT_ANALYSIS_DIR / "state_machine_VMM.json"
+        rules_path = CONTENT_ANALYSIS_DIR / "rules.json"
         if sm_path.exists():
             self._engine.load_state_machine(sm_path)
             self._sm = json.loads(sm_path.read_text(encoding="utf-8"))

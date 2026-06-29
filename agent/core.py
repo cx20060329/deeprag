@@ -206,9 +206,10 @@ class BCMAgent:
         # Reasoning engine
         from retrieval.reasoning_engine import ReasoningEngine
         self._engine = ReasoningEngine()
-        sm_path = Path("output/content_analysis/state_machine_VMM.json")
-        rules_path = Path("output/content_analysis/rules.json")
-        kg_path = Path("output/content_analysis/knowledge_graph.json")
+        from config import CONTENT_ANALYSIS_DIR
+        sm_path = CONTENT_ANALYSIS_DIR / "state_machine_VMM.json"
+        rules_path = CONTENT_ANALYSIS_DIR / "rules.json"
+        kg_path = CONTENT_ANALYSIS_DIR / "knowledge_graph.json"
 
         if sm_path.exists():
             self._engine.load_state_machine(sm_path)

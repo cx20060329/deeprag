@@ -1,2 +1,3 @@
 - [BCM-RAG Project Status](memory/bcm-rag-project-status.md) — ~80% complete, all 9 retrieval stages + embeddings + LLM + API done
 - [2026-06-18 Upgrades](memory/progress-2026-06-18.md) — BGE-M3 upgrade + Reranker enable + TRANSITION_TO fix (0→34) + Neo4j/Qdrant store abstractions
+- [2026-06-22 Optimization Roadmap](memory/optimization-roadmap-2026-06-22.md) — 五阶段优化完成: 评测体系 + Router(100%) + KG(+272边) + 6模块SM + 闭环反思

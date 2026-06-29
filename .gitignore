@@ -36,3 +36,7 @@ frontend/node_modules/
 # Sensitive
 test_ark.py
 test_zhipu.py
+MinerU/
+output/
+__pycache__/
+.pytest_cache/

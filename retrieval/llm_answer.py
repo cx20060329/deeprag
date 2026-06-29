@@ -1,51 +1,39 @@
-"""BCM-RAG Retrieval — LLM Answer Generator (Stage 9).
+"""DeepRAG Retrieval — LLM Answer Generator (Stage 9).
 
-Generates answers from compressed evidence using an LLM.
-Supports OpenAI-compatible APIs: Ark (Doubao), Zhipu (GLM), DeepSeek, etc.
-
-Configuration is read from environment variables or passed directly.
+Generates answers from compressed evidence using an LLM backend.
+Supports all OpenAI-compatible APIs via the unified llm module.
 """
 
 from __future__ import annotations
 
 import json
 import os
-from typing import Optional
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from llm.base import LLMBackend
 
 
 class LLMAnswerGenerator:
-    """OpenAI-compatible LLM for answering questions with evidence context.
+    """LLM-powered answer generator using the unified LLM backend.
 
-    Supports:
-    - Ark (ByteDance Doubao):  base_url="https://ark.cn-beijing.volces.com/api/v3"
-    - Zhipu (GLM):            base_url="https://open.bigmodel.cn/api/paas/v4/"
-    - DeepSeek:               base_url="https://api.deepseek.com/v1"
-    - Any OpenAI-compatible endpoint
+    Wraps the llm.LLMBackend abstraction. All DeepRAG modules that need
+    LLM calls should use this class (or the LLMBackend directly).
 
     Usage:
-        llm = LLMAnswerGenerator(
-            api_key="...",
-            base_url="https://ark.cn-beijing.volces.com/api/v3",
-            model="doubao-vision-pro-32k",
-        )
+        # Auto-detect from environment
+        llm = LLMAnswerGenerator()
+
+        # Specify provider
+        llm = LLMAnswerGenerator(provider="deepseek")
+
+        # Pass an existing backend
+        from llm import LLMFactory
+        backend = LLMFactory.create("zhipu")
+        llm = LLMAnswerGenerator(backend=backend)
+
         answer = llm.answer(evidence, query, intent)
     """
-
-    # Known provider presets
-    PROVIDERS = {
-        "ark": {
-            "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-            "model": "doubao-vision-pro-32k",
-        },
-        "zhipu": {
-            "base_url": "https://open.bigmodel.cn/api/paas/v4/",
-            "model": "glm-4-flash",
-        },
-        "deepseek": {
-            "base_url": "https://api.deepseek.com/v1",
-            "model": "deepseek-v4-flash",
-        },
-    }
 
     def __init__(
         self,
@@ -56,54 +44,98 @@ class LLMAnswerGenerator:
         max_tokens: int = 2048,
         temperature: float = 0.1,
         timeout: float = 60.0,
+        backend: "LLMBackend | None" = None,
     ):
-        # Provider shortcut
-        if provider and provider in self.PROVIDERS:
-            preset = self.PROVIDERS[provider]
-            base_url = base_url or preset["base_url"]
-            model = model or preset["model"]
+        """Initialize with either explicit params or a pre-built backend.
 
-        # Resolve from env vars
-        if not api_key:
-            api_key = (
-                os.getenv("ARK_API_KEY")
-                or os.getenv("ZHIPU_API_KEY")
-                or os.getenv("DEEPSEEK_API_KEY")
-                or os.getenv("OPENAI_API_KEY")
-            )
-        if not base_url:
-            base_url = os.getenv("LLM_BASE_URL", "")
-        if not model:
-            model = os.getenv("LLM_MODEL", "doubao-vision-pro-32k")
-
-        if not api_key:
-            raise ValueError(
-                "No API key provided. Set one of: ARK_API_KEY, ZHIPU_API_KEY, "
-                "DEEPSEEK_API_KEY, OPENAI_API_KEY env vars, or pass api_key=."
-            )
-
-        self.api_key = api_key
-        self.base_url = base_url
-        self.model = model
+        Args:
+            api_key: API key (auto-detected from env if not set).
+            base_url: API base URL (uses provider default if not set).
+            model: Model name (uses provider default if not set).
+            provider: Provider shortcut: 'deepseek', 'zhipu', 'ark', 'openai'.
+            max_tokens: Default max tokens per request.
+            temperature: Default sampling temperature.
+            timeout: HTTP request timeout in seconds.
+            backend: Pre-built LLMBackend instance. If provided, all other
+                     params are ignored and this backend is used directly.
+        """
         self.max_tokens = max_tokens
         self.temperature = temperature
-        self.timeout = timeout
 
-        self._client = None
+        if backend is not None:
+            self._backend = backend
+        else:
+            from llm import LLMConfig, OpenAICompatBackend
+
+            # Provider shortcut (backward compat)
+            if provider:
+                providers = LLMConfig.PROVIDERS
+                if provider in providers:
+                    preset = providers[provider]
+                    base_url = base_url or preset["base_url"]
+                    model = model or preset["model"]
+
+            # Resolve API key
+            if not api_key:
+                if provider == "deepseek":
+                    api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
+                elif provider == "zhipu":
+                    api_key = os.getenv("ZHIPU_API_KEY") or os.getenv("OPENAI_API_KEY")
+                elif provider == "ark":
+                    api_key = os.getenv("ARK_API_KEY") or os.getenv("OPENAI_API_KEY")
+                else:
+                    api_key = (
+                        os.getenv("ARK_API_KEY")
+                        or os.getenv("ZHIPU_API_KEY")
+                        or os.getenv("DEEPSEEK_API_KEY")
+                        or os.getenv("OPENAI_API_KEY")
+                    )
+            if not base_url:
+                base_url = os.getenv("LLM_BASE_URL", "")
+            if not model:
+                model = os.getenv("LLM_MODEL", "doubao-vision-pro-32k")
+
+            if not api_key:
+                raise ValueError(
+                    "No API key provided. Set one of: ARK_API_KEY, ZHIPU_API_KEY, "
+                    "DEEPSEEK_API_KEY, OPENAI_API_KEY env vars, or pass api_key=."
+                )
+
+            config = LLMConfig(
+                provider=provider,
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                timeout=timeout,
+            )
+            self._backend = OpenAICompatBackend(config)
+
+    # ------------------------------------------------------------------
+    # Backend access
+    # ------------------------------------------------------------------
+
+    @property
+    def backend(self) -> "LLMBackend":
+        """Access the underlying LLMBackend for advanced use."""
+        return self._backend
+
+    @property
+    def model(self) -> str:
+        """Return the model name."""
+        return self._backend.model_name
 
     @property
     def client(self):
-        """Lazy-init OpenAI client."""
-        if self._client is None:
-            from openai import OpenAI
-            self._client = OpenAI(
-                api_key=self.api_key,
-                base_url=self.base_url,
-                timeout=self.timeout,
-            )
-        return self._client
+        """Backward-compat: direct access to OpenAI client (for streaming etc.)."""
+        if hasattr(self._backend, "client"):
+            return self._backend.client
+        return None
 
-    # ---- Answer --------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Answer generation
+    # ------------------------------------------------------------------
 
     def answer(
         self,
@@ -115,50 +147,55 @@ class LLMAnswerGenerator:
         """Generate an answer from the compressed evidence package.
 
         Args:
-            evidence: Compressed evidence text (from Stage 8)
-            query: Original user query
-            intent: Intent analysis dict (optional)
-            system_prompt: Override system prompt
+            evidence: Compressed evidence text (from Stage 8).
+            query: Original user query.
+            intent: Intent analysis dict (optional).
+            system_prompt: Override system prompt.
 
         Returns:
             {
-                "answer": str,       # LLM-generated answer
-                "model": str,        # Model used
-                "usage": dict,       # Token usage
+                "answer": str,        # LLM-generated answer
+                "model": str,         # Model used
+                "usage": dict,        # Token usage
                 "evidence_length": int,
             }
         """
+        from llm.types import Message
+
         if system_prompt is None:
             system_prompt = self._build_system_prompt(intent)
 
         user_message = self._build_user_message(query, evidence)
 
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-            )
-        except Exception as e:
+        resp = self._backend.chat(
+            messages=[
+                Message(role="system", content=system_prompt),
+                Message(role="user", content=user_message),
+            ],
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+        )
+
+        if resp.error:
             return {
-                "answer": f"[LLM Error] {e}",
-                "model": self.model,
-                "usage": {},
+                "answer": f"[LLM Error] {resp.error}",
+                "model": resp.model,
+                "usage": {
+                    "prompt_tokens": resp.usage.prompt_tokens,
+                    "completion_tokens": resp.usage.completion_tokens,
+                    "total_tokens": resp.usage.total_tokens,
+                },
                 "evidence_length": len(evidence),
-                "error": str(e),
+                "error": resp.error,
             }
 
         return {
-            "answer": response.choices[0].message.content,
-            "model": response.model or self.model,
+            "answer": resp.content,
+            "model": resp.model,
             "usage": {
-                "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
-                "completion_tokens": response.usage.completion_tokens if response.usage else 0,
-                "total_tokens": response.usage.total_tokens if response.usage else 0,
+                "prompt_tokens": resp.usage.prompt_tokens,
+                "completion_tokens": resp.usage.completion_tokens,
+                "total_tokens": resp.usage.total_tokens,
             },
             "evidence_length": len(evidence),
         }
@@ -170,37 +207,91 @@ class LLMAnswerGenerator:
         intent: dict | None = None,
     ):
         """Stream answer tokens. Yields text chunks."""
+        from llm.types import Message
+
         system_prompt = self._build_system_prompt(intent)
         user_message = self._build_user_message(query, evidence)
 
-        stream = self.client.chat.completions.create(
-            model=self.model,
+        yield from self._backend.chat_stream(
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
+                Message(role="system", content=system_prompt),
+                Message(role="user", content=user_message),
             ],
             max_tokens=self.max_tokens,
             temperature=self.temperature,
-            stream=True,
         )
 
-        for chunk in stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+    # ------------------------------------------------------------------
+    # Chat (generic LLM call for other modules)
+    # ------------------------------------------------------------------
 
-    # ---- Prompts -------------------------------------------------------------
+    def chat(
+        self,
+        messages: list[dict[str, str]],
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        response_format: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Generic chat completion — for modules that need raw LLM access.
 
-    @staticmethod
-    def _build_system_prompt(intent: dict | None = None) -> str:
-        """Build the system prompt for BCM engineering domain."""
+        Args:
+            messages: List of {"role": "...", "content": "..."} dicts.
+            max_tokens: Override default max tokens.
+            temperature: Override default temperature.
+            response_format: Optional {"type": "json_object"} for JSON mode.
+
+        Returns:
+            {
+                "content": str,
+                "model": str,
+                "usage": {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int},
+                "finish_reason": str,
+                "error": str | None,
+            }
+        """
+        from llm.types import Message
+
+        llm_messages = [Message(role=m["role"], content=m["content"]) for m in messages]
+        kwargs = {}
+        if response_format:
+            kwargs["response_format"] = response_format
+
+        resp = self._backend.chat(
+            messages=llm_messages,
+            max_tokens=max_tokens or self.max_tokens,
+            temperature=temperature if temperature is not None else self.temperature,
+            **kwargs,
+        )
+
+        return {
+            "content": resp.content,
+            "model": resp.model,
+            "usage": {
+                "prompt_tokens": resp.usage.prompt_tokens,
+                "completion_tokens": resp.usage.completion_tokens,
+                "total_tokens": resp.usage.total_tokens,
+            },
+            "finish_reason": resp.finish_reason,
+            "error": resp.error,
+        }
+
+    # ------------------------------------------------------------------
+    # Prompts (domain-specific — will be parameterized in Step 8)
+    # ------------------------------------------------------------------
+
+    def _build_system_prompt(self, intent: dict | None = None, domain=None) -> str:
+        """Build the system prompt from DomainConfig or BCM defaults."""
         qtype = intent.get("question_type", "factual") if intent else "factual"
+
+        if domain is not None and domain.llm_prompts.answer_system_prompt:
+            return domain.llm_prompts.answer_system_prompt
 
         base = """你是汽车BCM（车身控制模块）功能规格专家。
 
 你的任务是根据提供的证据片段回答用户问题。
 
 规则：
-1. 仅基于提供的证据片段回答问题，不要添加工证据中不存在的推测
+1. 仅基于提供的证据片段回答问题，不要添加证据中不存在的推测
 2. 如果证据不足，明确说明"根据现有文档无法确定"
 3. 引用证据时注明章节号和模块名
 4. 回答使用中文，技术术语保留英文原名
@@ -219,15 +310,7 @@ class LLMAnswerGenerator:
 
     @staticmethod
     def _build_user_message(query: str, evidence: str) -> str:
-        """Build the user message with evidence context.
-
-        Automatically detects evidence format:
-          - If evidence contains "## 依赖链" (structured evidence),
-            uses a prompt that guides the LLM to reference dependency
-            chains and state transitions explicitly.
-          - Otherwise uses the original format.
-        """
-        # Detect structured evidence format (Improvement #3)
+        """Build the user message with evidence context."""
         if "## 依赖链" in evidence:
             return f"""## 用户问题
 
@@ -252,7 +335,6 @@ class LLMAnswerGenerator:
 3. **相关模块/信号/状态**：列出涉及的关键实体
 4. **证据来源**：列出引用的依赖链、状态转移、规则和章节"""
 
-        # Original format (backward compatible)
         return f"""## 用户问题
 
 {query}
@@ -272,13 +354,9 @@ class LLMAnswerGenerator:
 
     @staticmethod
     def format_evidence_for_llm(evidence: str, top_chunks: list[dict]) -> str:
-        """Format evidence and top chunks for the LLM prompt.
-
-        This is an enhanced formatter that includes richer metadata.
-        """
+        """Format evidence and top chunks for the LLM prompt."""
         parts = [evidence]
 
-        # Add section references
         sections = set()
         for r in top_chunks:
             chunk = r.get("chunk", {})

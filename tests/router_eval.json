@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "name": "BCM-RAG Router Evaluation Dataset",
+    "version": "1.0",
+    "description": "30 queries covering 6 DAG templates + boundary cases for Router accuracy testing"
+  },
+  "queries": [
+    {"id": "R01", "query": "IGN1信号的定义是什么？", "expected_template": "factual_lookup"},
+    {"id": "R02", "query": "VMM模块有哪些功能？", "expected_template": "factual_lookup"},
+    {"id": "R03", "query": "PEPS_UsageMode信号有哪些取值？", "expected_template": "factual_lookup"},
+    {"id": "R04", "query": "近光灯的配置参数是什么？", "expected_template": "factual_lookup"},
+    {"id": "R05", "query": "BCM包含哪些子系统？列出所有模块。", "expected_template": "factual_lookup"},
+
+    {"id": "R06", "query": "进入Driving需要什么条件？", "expected_template": "state_transition"},
+    {"id": "R07", "query": "Inactive模式如何退出？", "expected_template": "state_transition"},
+    {"id": "R08", "query": "Abandoned模式的进入条件是什么？", "expected_template": "state_transition"},
+    {"id": "R09", "query": "Convenience状态有哪些出边？", "expected_template": "state_transition"},
+    {"id": "R10", "query": "Driving退出的触发事件是什么？", "expected_template": "state_transition"},
+
+    {"id": "R11", "query": "KeyLost会影响哪些功能？", "expected_template": "impact_analysis"},
+    {"id": "R12", "query": "IGN1故障会导致什么后果？", "expected_template": "impact_analysis"},
+    {"id": "R13", "query": "PEPS_UsageMode失效的影响范围？", "expected_template": "impact_analysis"},
+    {"id": "R14", "query": "BCM休眠失败会影响什么？", "expected_template": "impact_analysis"},
+    {"id": "R15", "query": "IGN1继电器开路有什么连锁反应？", "expected_template": "impact_analysis"},
+
+    {"id": "R16", "query": "从Abandoned如何进入Driving？", "expected_template": "path_finding"},
+    {"id": "R17", "query": "Driving到Inactive经过哪些状态？", "expected_template": "path_finding"},
+    {"id": "R18", "query": "Abandoned到Convenience的最短路径？", "expected_template": "path_finding"},
+    {"id": "R19", "query": "Inactive如何到达Driving？需要几步？", "expected_template": "path_finding"},
+    {"id": "R20", "query": "从Abandoned到Driving有哪些路径？", "expected_template": "path_finding"},
+
+    {"id": "R21", "query": "为什么车辆无法从Inactive进入Driving？", "expected_template": "diagnostic"},
+    {"id": "R22", "query": "车窗防夹为什么不工作？", "expected_template": "diagnostic"},
+    {"id": "R23", "query": "IGN1继电器不吸合是什么故障？", "expected_template": "diagnostic"},
+    {"id": "R24", "query": "BCM无法进入休眠怎么诊断？", "expected_template": "diagnostic"},
+    {"id": "R25", "query": "为什么门锁不自动上锁？", "expected_template": "diagnostic"},
+
+    {"id": "R26", "query": "VMM状态机是否存在不可达状态？", "expected_template": "reachability_check"},
+    {"id": "R27", "query": "VMM状态机是否有死锁？", "expected_template": "reachability_check"},
+    {"id": "R28", "query": "VMM所有状态是否互相连通？", "expected_template": "reachability_check"},
+    {"id": "R29", "query": "VMM状态机中是否有永远无法进入的状态？", "expected_template": "reachability_check"},
+    {"id": "R30", "query": "检查VMM是否存在活锁风险？", "expected_template": "reachability_check"}
+  ]
+}

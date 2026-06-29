@@ -14,10 +14,13 @@ import json
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from retrieval.graph_retriever import GraphRetriever
 from retrieval.vector_retriever import KeywordRetriever
+
+if TYPE_CHECKING:
+    from domain.config import DomainConfig
 
 
 class RetrievalPipeline:
@@ -27,33 +30,53 @@ class RetrievalPipeline:
     Supports LLM-powered answer generation via OpenAI-compatible APIs.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        data_dir: str | None = None,
+        llm_config: dict | None = None,
+        domain: "DomainConfig | None" = None,
+    ):
         self.graph = GraphRetriever()
         self.vector = KeywordRetriever()
-        self.dense = None          # DenseRetriever — loaded when embeddings available
-        self.llm = None            # LLMAnswerGenerator — set via configure_llm()
+        self.dense = None
+        self.llm = None
         self.section_tree: dict = {}
         self._loaded = False
+        self._data_dir = Path(data_dir) if data_dir else None
+
+        if domain is not None:
+            self._module_aliases = domain.intent.module_aliases
+        else:
+            self._module_aliases = dict(self._BCM_MODULE_ALIASES)
 
     # ---- Load --------------------------------------------------------------
 
     def load(
         self,
-        kg_path: str | Path = "output/content_analysis/knowledge_graph.json",
-        chunks_path: str | Path = "output/content_analysis/chunks.json",
-        tree_path: str | Path = "output/content_analysis/section_tree.json",
-        points_path: str | Path = "output/content_analysis/vector_points.json",
+        kg_path: str | Path | None = None,
+        chunks_path: str | Path | None = None,
+        tree_path: str | Path | None = None,
+        points_path: str | Path | None = None,
         use_dense: bool = True,
     ) -> "RetrievalPipeline":
         """Load all data sources.
 
         Args:
-            kg_path: Path to knowledge graph JSON
-            chunks_path: Path to chunks JSON (for BM25)
-            tree_path: Path to section tree JSON
-            points_path: Path to vector points JSON (for dense search)
+            kg_path: Path to knowledge graph JSON (defaults to CONTENT_ANALYSIS_DIR/knowledge_graph.json)
+            chunks_path: Path to chunks JSON (for BM25) (defaults to CONTENT_ANALYSIS_DIR/chunks.json)
+            tree_path: Path to section tree JSON (defaults to CONTENT_ANALYSIS_DIR/section_tree.json)
+            points_path: Path to vector points JSON (for dense search) (defaults to CONTENT_ANALYSIS_DIR/vector_points.json)
             use_dense: Whether to attempt loading dense retriever
         """
+        from config import CONTENT_ANALYSIS_DIR
+        if kg_path is None:
+            kg_path = CONTENT_ANALYSIS_DIR / "knowledge_graph.json"
+        if chunks_path is None:
+            chunks_path = CONTENT_ANALYSIS_DIR / "chunks.json"
+        if tree_path is None:
+            tree_path = CONTENT_ANALYSIS_DIR / "section_tree.json"
+        if points_path is None:
+            points_path = CONTENT_ANALYSIS_DIR / "vector_points.json"
         print("Loading retrieval pipeline...")
 
         self.graph.load(kg_path)
@@ -299,7 +322,7 @@ class RetrievalPipeline:
     # ---- Stage 1: Intent Analysis ------------------------------------------
 
     # Module name aliases: common terms → canonical module name
-    _MODULE_ALIASES = {
+    _BCM_MODULE_ALIASES = {
         "bcm": "VMM",           # BCM system → VMM (Vehicle Mode Management)
         "车身控制": "VMM",
         "电源管理": "VMM",
@@ -329,6 +352,18 @@ class RetrievalPipeline:
     # Query patterns that indicate state transition lookup
     _TRANSITION_PATTERNS = re.compile(
         r"迁移|转移|进入.*条件|如何.*进入|怎么.*进入|触发.*条件|前置.*条件",
+        re.IGNORECASE,
+    )
+
+    # Query patterns that indicate division-of-work / responsibility lookup
+    _DIVISION_PATTERNS = re.compile(
+        r"分工|负责|职责|谁做|谁开发|R&A|S&A|埃泰克|供应商.*客户",
+        re.IGNORECASE,
+    )
+
+    # Query patterns that indicate tooling / equipment delivery lookup
+    _TOOLING_PATTERNS = re.compile(
+        r"调试工具|编译器|测试盒|烧写工具|开发工具|交付.*工具|采购.*工具",
         re.IGNORECASE,
     )
 
@@ -367,6 +402,10 @@ class RetrievalPipeline:
             intent["hint_signal_def"] = True
         if self._TRANSITION_PATTERNS.search(query):
             intent["hint_transition"] = True
+        if self._DIVISION_PATTERNS.search(query):
+            intent["hint_division"] = True
+        if self._TOOLING_PATTERNS.search(query):
+            intent["hint_tooling"] = True
 
         # Extract keywords first
         # Chinese phrases
@@ -376,7 +415,7 @@ class RetrievalPipeline:
         en_ids = re.findall(r"[A-Z][A-Za-z0-9_]+", query)
         intent["keywords"].extend(en_ids[:5])
         # Module aliases
-        for alias, module in self._MODULE_ALIASES.items():
+        for alias, module in self._module_aliases.items():
             if alias in q:
                 intent["keywords"].append(module)
         intent["keywords"] = intent["keywords"][:15]
@@ -555,19 +594,66 @@ class RetrievalPipeline:
         # Module filter from intent
         filter_module = intent.get("modules", [None])[0] if intent.get("modules") else ""
 
+        # ── Query expansion: add document-native terms for common query patterns ──
+        ql = query.lower()
+        _expansion_map = {
+            "软件": "Bootloader 通讯诊断 网络管理 系统功能定义 休眠唤醒 诊断功能 信息安全 功能安全",
+            "以太网": "Ethernet SOMEIP 以太网",
+            "分工": "R&A S&A 负责 协助 验收 供应商 CH事业部",
+            "调试": "Bootloader 烧写 调试工具",
+        }
+        extra_terms = []
+        for trigger, expansion in _expansion_map.items():
+            if trigger in ql:
+                extra_terms.append(expansion)
+        expanded_query = query
+        if extra_terms:
+            expanded_query = query + " " + " ".join(extra_terms)
+
         if self.dense and self.dense.is_loaded:
-            # Dense search with entity boost
-            dense_results = self.dense.search(query, top_k=20)
-            dense_results = self.dense.hybrid_search(query, entity_ids, top_k=20)
+            # Dense search with EXPANDED query (includes document-native synonyms)
+            dense_results = self.dense.search(expanded_query, top_k=20)
+            dense_results = self.dense.hybrid_search(expanded_query, entity_ids, top_k=20)
 
             # Also get BM25 results for fusion
-            bm25_results = self.vector.hybrid_search(query, entity_ids, top_k=10)
+            bm25_results = self.vector.hybrid_search(expanded_query, entity_ids, top_k=10)
+
+            # ── Keyword pre-boost with expanded query ──
+            query_terms_lower = [t.lower() for t in re.findall(r'[一-鿿]{2,}|[A-Za-z0-9_]{2,}', expanded_query)]
+            for r_list in (dense_results, bm25_results):
+                for r in r_list:
+                    chunk_text = (r["chunk"].get("text", "") + " " + r["chunk"].get("section_title", "")).lower()
+                    term_matches = sum(1 for t in query_terms_lower if t in chunk_text)
+                    if term_matches >= 2:
+                        r["score"] = r.get("score", 0) * (1.0 + 0.2 * min(term_matches, 5))
 
             # Reciprocal Rank Fusion
             return self._fuse_results(dense_results, bm25_results)
         else:
-            # BM25-only fallback
-            return self.vector.hybrid_search(query, entity_ids, top_k=20)
+            # BM25-only fallback: also apply query expansion and keyword boost
+            ql = query.lower()
+            _expansion_map = {
+                "软件": "Bootloader 通讯诊断 网络管理 系统功能定义 休眠唤醒 诊断功能 信息安全 功能安全",
+                "以太网": "Ethernet SOMEIP 以太网",
+                "分工": "R&A S&A 负责 协助 验收 供应商 CH事业部",
+                "调试": "Bootloader 烧写 调试工具",
+            }
+            extra_terms = []
+            for trigger, expansion in _expansion_map.items():
+                if trigger in ql:
+                    extra_terms.append(expansion)
+            expanded_query = query
+            if extra_terms:
+                expanded_query = query + " " + " ".join(extra_terms)
+
+            results = self.vector.hybrid_search(expanded_query, entity_ids, top_k=20)
+            query_terms_lower = [t.lower() for t in re.findall(r'[一-鿿]{2,}|[A-Za-z0-9_]{2,}', expanded_query)]
+            for r in results:
+                chunk_text = (r["chunk"].get("text", "") + " " + r["chunk"].get("section_title", "")).lower()
+                term_matches = sum(1 for t in query_terms_lower if t in chunk_text)
+                if term_matches >= 2:
+                    r["score"] = r.get("score", 0) * (1.0 + 0.2 * min(term_matches, 5))
+            return results
 
     def _fuse_results(
         self,
@@ -690,6 +776,26 @@ class RetrievalPipeline:
             if intent and intent.get("hint_transition") and chunk_type == "state_transition":
                 entry["score"] *= 1.3
 
+            # ── NEW: Boost high-value structured chunk types ──
+            # function_requirement (基本功能要求表) and division_table (分工表)
+            # contain dense structured data that's highly relevant for engineering queries
+            if chunk_type == "function_requirement":
+                boost = 1.8 if (intent and (intent.get("hint_tooling") or intent.get("hint_division"))) else 1.4
+                entry["score"] *= boost
+            if chunk_type == "division_table":
+                boost = 2.0 if (intent and intent.get("hint_division")) else 1.5
+                entry["score"] *= boost
+
+            # ── NEW: Keyword match boost — query terms appearing in chunk text ──
+            # This catches cases where BM25/dense failed to rank but terms still match
+            if intent:
+                query_kws = [kw.lower() for kw in intent.get("keywords", []) if len(kw) >= 2]
+                chunk_text_lower = (chunk.get("text", "") + " " + chunk.get("section_title", "")).lower()
+                kw_matches = sum(1 for kw in query_kws if kw in chunk_text_lower)
+                if kw_matches >= 3:
+                    entry["score"] *= 1.0 + 0.15 * min(kw_matches, 6)  # up to +90% for 6+ matches
+                    entry["keyword_match"] = kw_matches
+
             # Tree/section match (prefer deeper/more specific sections)
             if chunk_section in graph_sections:
                 section_depth = chunk_section.count(".") + 1
@@ -809,6 +915,20 @@ class RetrievalPipeline:
                 "state_transition", "state_machine",
             ):
                 rule_bonus += 0.2
+
+            # ── NEW: Boost function_requirement and division_table types ──
+            if chunk.get("chunk_type") == "function_requirement":
+                rule_bonus += 0.2
+            if chunk.get("chunk_type") == "division_table":
+                rule_bonus += 0.25
+
+            # ── NEW: Keyword match in chunk text ──
+            # Direct keyword matches indicate relevance beyond embedding similarity
+            chunk_text = (chunk.get("text", "") + " " + chunk.get("section_title", "")).lower()
+            query_kw_list = [kw.lower() for kw in intent.get("keywords", []) if len(kw) >= 2]
+            kw_hits = sum(1 for kw in query_kw_list if kw in chunk_text)
+            if kw_hits >= 4:
+                rule_bonus += 0.10 * min(kw_hits - 3, 5)  # +0.1 to +0.5 for 4-8 hits
 
             # Has image (visual evidence)
             if chunk.get("has_image"):

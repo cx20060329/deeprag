@@ -14,7 +14,7 @@ Usage:
 
 from parser.base import AbstractParser
 from parser.models import ParseResult, StructuredDocumentModel
-from parser.fallback import parse_document, create_parser
+from parser.fallback import parse_document, create_parser, create_parser_for_file
 
 __all__ = [
     "AbstractParser",
@@ -22,4 +22,5 @@ __all__ = [
     "StructuredDocumentModel",
     "parse_document",
     "create_parser",
+    "create_parser_for_file",
 ]
